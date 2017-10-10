@@ -30,13 +30,17 @@ class SuperRegistration(object):
         if self.shifts is None:
             self.shifts = rng.rand(len(self.images)-1)
 
-        self.coef = np.random.randn(2*deg)
+        self.coef = np.random.randn(2*deg-1)
 
         self.x = np.arange(images[0].shape[0])
         self.k = 2*np.pi*np.arange(self.deg)
+        self.ksin = self.k[1:]
+        self.kcos = self.k[:]
         self.domain = [self.x.min() - self.x.ptp(), self.x.max() + self.x.ptp()]
-        self.sinkx = np.sin(self.k[:,None] * self.coord(self.x)[None,:])
-        self.coskx = np.cos(self.k[:,None] * self.coord(self.x)[None,:])
+
+        # two different sums, one for 
+        self.sinkx = np.sin(self.ksin[:,None] * self.coord(self.x)[None,:])
+        self.coskx = np.cos(self.kcos[:,None] * self.coord(self.x)[None,:])
 
         self.gradcoef = np.vstack([
             np.hstack([self.sinkx for i in range(self.N)]),
@@ -57,18 +61,19 @@ class SuperRegistration(object):
 
     @property
     def An(self):
-        return self.coef[:self.deg]
+        return self.coef[:self.deg-1]
 
     @property
     def Bn(self):
-        return self.coef[self.deg:]
+        return self.coef[self.deg-1:]
 
     def coord(self, x):
         return (x - self.domain[0]) / (self.domain[1] - self.domain[0])
 
     def __call__(self, x):
-        kx = np.outer(self.coord(x), self.k)
-        return (self.An*np.sin(kx) + self.Bn*np.cos(kx)).sum(axis=-1)
+        kxsin = np.outer(self.coord(x), self.ksin)
+        kxcos = np.outer(self.coord(x), self.kcos)
+        return (self.An*np.sin(kxsin)).sum(axis=-1) + (self.Bn*np.cos(kxcos)).sum(axis=-1)
 
     def res(self, params=None):
         params = params if params is not None else self.params
@@ -79,12 +84,17 @@ class SuperRegistration(object):
     def gradshifts(self, shifts=None):
         shifts = shifts if shifts is not None else self.shifts
 
-        sinks = np.sin(shifts[:,None] * self.k[None,:])
-        cosks = np.cos(shifts[:,None] * self.k[None,:])
+        sinks0 = np.sin(shifts[:,None] * self.k[None,1:])
+        cosks0 = np.cos(shifts[:,None] * self.k[None,1:])
+        sinks1 = np.sin(shifts[:,None] * self.k[None,0:])
+        cosks1 = np.cos(shifts[:,None] * self.k[None,0:])
 
-        dIds_sin = -(self.k*(self.An*sinks + self.Bn*cosks)).dot(self.sinkx)
-        dIds_cos = -(self.k*(self.Bn*sinks - self.An*cosks)).dot(self.coskx)
-        return dIds_sin + dIds_cos
+        dIds_sin = -(self.k[1:]*(self.An*sinks0 + self.Bn*cosks0)).dot(self.sinkx)
+        dIds_cos = -(self.k[0:]*(self.Bn*sinks1 - self.An*cosks1)).dot(self.coskx)
+
+        #dIds_sin = (
+        #    self.An*np.
+        return np.hstack([dIds_sin, dIds_cos])
 
     def grad(self, params=None):
         params = params if params is not None else self.params
