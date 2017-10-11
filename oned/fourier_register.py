@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import numexpr as ne
 
@@ -44,11 +45,11 @@ class SuperRegistration(object):
 
     def set_params(self, params):
         self.shifts = params[:len(self.shifts)]
-        self.coef[1:] = params[len(self.shifts):]
+        self.coef = params[len(self.shifts):]
 
     @property
     def params(self):
-        return np.hstack([self.shifts, self.coef[1:]])
+        return np.hstack([self.shifts, self.coef])
 
     @property
     def model(self):
@@ -66,11 +67,10 @@ class SuperRegistration(object):
         return (x - self.domain[0]) / (self.domain[1] - self.domain[0])
 
     def __call__(self, x):
-        n, m = np.s_[1:], np.s_[:]
         arg = np.outer(self.coord(x), self.k)
         return (
-                np.sin(arg[:,n]).dot(self.An[n]) +
-                np.cos(arg[:,m]).dot(self.Bn[m])
+            np.sin(arg).dot(self.An) +
+            np.cos(arg).dot(self.Bn)
         )
 
     def res(self, params=None):
@@ -82,18 +82,15 @@ class SuperRegistration(object):
     def gradshifts(self, shifts=None):
         shifts = shifts if shifts is not None else self.shifts
 
-        n = np.s_[1:]
-        m = np.s_[:]
-
         args = self.coord(shifts[:,None] * self.k[None,:])
         sinkd = ne.evaluate('sin(args)')
         coskd = ne.evaluate('cos(args)')
 
-        cn = self.An[n]*self.k[n]
-        cm = self.Bn[m]*self.k[m]
+        cn = self.An*self.k
+        cm = self.Bn*self.k
 
-        dIds_n = (cn*coskd[:,n]).dot(self.coskx[n]) - (cn*sinkd[:,n]).dot(self.sinkx[n])
-        dIds_m = (cm*sinkd[:,m]).dot(self.coskx[m]) + (cm*coskd[:,m]).dot(self.sinkx[m])
+        dIds_n = (cn*coskd).dot(self.coskx) - (cn*sinkd).dot(self.sinkx)
+        dIds_m = (cm*sinkd).dot(self.coskx) + (cm*coskd).dot(self.sinkx)
 
         return (dIds_n - dIds_m) / np.diff(self.domain)
 
@@ -103,7 +100,7 @@ class SuperRegistration(object):
 
         sinkx = ne.evaluate('sin(allargs)')
         coskx = ne.evaluate('cos(allargs)')
-        return np.vstack([sinkx[1:], coskx])
+        return np.vstack([sinkx, coskx])
 
     def grad(self, params=None):
         if params is not None:
@@ -142,9 +139,11 @@ class SuperRegistration(object):
         return np.array(j).T
 
     def fit(self, **kwargs):
-        lm = LM(self.res, self.grad)
-        self.sol = lm.leastsq(self.params, **kwargs)
-        return self.sol[0][:self.N-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            lm = LM(self.res, self.grad)
+            self.sol = lm.leastsq(self.params, **kwargs)
+            return self.sol[0][:self.N-1]
 
 
 class Fourier(object):
@@ -296,11 +295,11 @@ def single_point_bias(N=2000, noise=0.05):
     degree = 35 #DEGREE
     shift = np.random.rand()
     expt = data, s, true, fourier = fakedata(
-        2, 124, noise, shifts=[shift], deg=40
+        2, 124, noise, shifts=[shift], deg=degree
     )
     fits = []
     for i in range(N):
-        reg = OneDRegister(true + noise*rng.randn(*true.shape), deg=degree)
+        reg = SuperRegistration(true + noise*rng.randn(*true.shape), deg=degree)
         fits.append(reg.fit())
         print(i, reg.shifts - shift)
 
