@@ -1,4 +1,6 @@
 import numpy as np
+import numexpr as ne
+
 from scipy.optimize import golden, leastsq
 from matplotlib.pyplot import *
 from scipy.ndimage import gaussian_filter
@@ -30,30 +32,23 @@ class SuperRegistration(object):
         if self.shifts is None:
             self.shifts = rng.rand(len(self.images)-1)
 
-        self.coef = np.random.randn(2*deg-1)
+        self.coef = np.random.randn(2*deg)
 
         self.x = np.arange(images[0].shape[0])
         self.k = 2*np.pi*np.arange(self.deg)
-        self.ksin = self.k[1:]
-        self.kcos = self.k[:]
-        self.domain = [self.x.min() - self.x.ptp(), self.x.max() + self.x.ptp()]
+        self.domain = [self.x.min(), self.x.max() + self.x.ptp()]
 
         # two different sums, one for 
-        self.sinkx = np.sin(self.ksin[:,None] * self.coord(self.x)[None,:])
-        self.coskx = np.cos(self.kcos[:,None] * self.coord(self.x)[None,:])
-
-        self.gradcoef = np.vstack([
-            np.hstack([self.sinkx for i in range(self.N)]),
-            np.hstack([self.coskx for i in range(self.N)])
-        ])
+        self.sinkx = np.sin(self.k[:,None] * self.coord(self.x)[None,:])
+        self.coskx = np.cos(self.k[:,None] * self.coord(self.x)[None,:])
 
     def set_params(self, params):
         self.shifts = params[:len(self.shifts)]
-        self.coef = params[len(self.shifts):]
+        self.coef[1:] = params[len(self.shifts):]
 
     @property
     def params(self):
-        return np.hstack([self.shifts, self.coef])
+        return np.hstack([self.shifts, self.coef[1:]])
 
     @property
     def model(self):
@@ -61,19 +56,22 @@ class SuperRegistration(object):
 
     @property
     def An(self):
-        return self.coef[:self.deg-1]
+        return self.coef[:self.deg]
 
     @property
     def Bn(self):
-        return self.coef[self.deg-1:]
+        return self.coef[self.deg:]
 
     def coord(self, x):
         return (x - self.domain[0]) / (self.domain[1] - self.domain[0])
 
     def __call__(self, x):
-        kxsin = np.outer(self.coord(x), self.ksin)
-        kxcos = np.outer(self.coord(x), self.kcos)
-        return (self.An*np.sin(kxsin)).sum(axis=-1) + (self.Bn*np.cos(kxcos)).sum(axis=-1)
+        n, m = np.s_[1:], np.s_[:]
+        arg = np.outer(self.coord(x), self.k)
+        return (
+                np.sin(arg[:,n]).dot(self.An[n]) +
+                np.cos(arg[:,m]).dot(self.Bn[m])
+        )
 
     def res(self, params=None):
         params = params if params is not None else self.params
@@ -84,42 +82,67 @@ class SuperRegistration(object):
     def gradshifts(self, shifts=None):
         shifts = shifts if shifts is not None else self.shifts
 
-        sinks0 = np.sin(shifts[:,None] * self.k[None,1:])
-        cosks0 = np.cos(shifts[:,None] * self.k[None,1:])
-        sinks1 = np.sin(shifts[:,None] * self.k[None,0:])
-        cosks1 = np.cos(shifts[:,None] * self.k[None,0:])
+        n = np.s_[1:]
+        m = np.s_[:]
 
-        dIds_sin = -(self.k[1:]*(self.An*sinks0 + self.Bn*cosks0)).dot(self.sinkx)
-        dIds_cos = -(self.k[0:]*(self.Bn*sinks1 - self.An*cosks1)).dot(self.coskx)
+        args = self.coord(shifts[:,None] * self.k[None,:])
+        sinkd = ne.evaluate('sin(args)')
+        coskd = ne.evaluate('cos(args)')
 
-        #dIds_sin = (
-        #    self.An*np.
-        return np.hstack([dIds_sin, dIds_cos])
+        cn = self.An[n]*self.k[n]
+        cm = self.Bn[m]*self.k[m]
+
+        dIds_n = (cn*coskd[:,n]).dot(self.coskx[n]) - (cn*sinkd[:,n]).dot(self.sinkx[n])
+        dIds_m = (cm*sinkd[:,m]).dot(self.coskx[m]) + (cm*coskd[:,m]).dot(self.sinkx[m])
+
+        return (dIds_n - dIds_m) / np.diff(self.domain)
+
+    def gradcoef(self):
+        allcoords = np.hstack([self.x] + [self.x + s for s in self.shifts])
+        allargs = self.k[:,None] * self.coord(allcoords)[None,:]
+
+        sinkx = ne.evaluate('sin(allargs)')
+        coskx = ne.evaluate('cos(allargs)')
+        return np.vstack([sinkx[1:], coskx])
 
     def grad(self, params=None):
-        params = params if params is not None else self.params
-        self.set_params(params)
+        if params is not None:
+            self.set_params(params)
+        else:
+            params = self.params
 
+        gcoef = self.gradcoef()
         gshifts = self.gradshifts(self.shifts)
+
         gradshifts = np.zeros((self.N-1, self.L*self.N))
         for i in range(self.N-1):
             gradshifts[i, (i+1)*self.L:(i+2)*self.L] = gshifts[i]
 
-        return np.vstack([gradshifts, self.gradcoef]).T
+        return np.vstack([gradshifts, gcoef]).T
 
-    def jac(self, p, h=1e-6):
+    def jac(self, p=None, h=1e-6):
+        if p is not None:
+            self.set_params(p)
+        else:
+            p = self.params
+
         assert len(p) == len(self.params)
         p0 = p.copy()
         r0 = self.res(p0)
         j = []
         for i in range(len(p0)):
             p0[i] += h
-            j += [(self.res(p0) - r0)/h]
-            p0[i] -= h
+            res0 = self.res(p0)
+            p0[i] -= 2*h
+            res1 = self.res(p0)
+            p0[i] += h
+
+            j += [(res0 - res1) / (2*h)]
+
         return np.array(j).T
 
     def fit(self, **kwargs):
-        lm = LM(self.res, self.jac)
+        lm = LM(self.res, self.grad)
         self.sol = lm.leastsq(self.params, **kwargs)
         return self.sol[0][:self.N-1]
 
@@ -299,3 +322,4 @@ if __name__=="__main__":
     #    print(n, bias, bias_std)
     #errorbar(noises, biases, yerr=biases_std)
     #show()
+
