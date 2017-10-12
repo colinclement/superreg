@@ -13,7 +13,7 @@ DEGREE = 20
 rng = np.random.RandomState(14850)
 
 class SuperRegistration(object):
-    def __init__(self, images, deg, shifts=None):
+    def __init__(self, images, deg, shifts=None, domain=None):
         """
         Parameters
         ----------
@@ -37,7 +37,8 @@ class SuperRegistration(object):
 
         self.x = 1.*np.arange(images[0].shape[0])
         self.k = 2*np.pi*np.arange(self.deg)
-        self.domain = [self.x.min(), self.x.max() + self.x.ptp()]
+        self.domain = domain if domain is not None else [self.x.min(), 
+                                                         self.x.max() + self.x.ptp()]
 
         # two different sums, one for 
         self.sinkx = np.sin(self.k[:,None] * self.coord(self.x)[None,:])
@@ -307,7 +308,7 @@ def single_point_bias(N=2000, noise=0.05):
 
 if __name__=="__main__":
     degree = 37 # DEGREE
-    expt = fakedata(2, 124, 1e-4, deg=40)
+    expt = fakedata(2, 124, 0.05, deg=40)
     data, s, true, fourier = expt
     reg = OneDRegister(data, deg=degree)
 
