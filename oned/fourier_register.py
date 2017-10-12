@@ -35,7 +35,7 @@ class SuperRegistration(object):
 
         self.coef = np.random.randn(2*deg)
 
-        self.x = np.arange(images[0].shape[0])
+        self.x = 1.*np.arange(images[0].shape[0])
         self.k = 2*np.pi*np.arange(self.deg)
         self.domain = [self.x.min(), self.x.max() + self.x.ptp()]
 
