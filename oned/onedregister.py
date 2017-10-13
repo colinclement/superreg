@@ -45,7 +45,7 @@ class Register(object):
 
         usage:
             reg = Register(imag1, imag0)
-            delta, delta_sigma, msg = reg.minimize()
+            delta, delta_sigma, msg = reg.fit()
         """
         assert imag0.shape == imag1.shape, "Images must share their shape"
         self.imag0 = imag0
@@ -59,26 +59,11 @@ class Register(object):
         self.L = len(imag0)
         self._h = kwargs.get("h", 1E-7)
         self._mirror = kwargs.get("mirror", True)
-        #self._dy = np.array([self._h, 0.])
-        #self._dx = np.array([0., self._h])
 
         self.x = np.arange(self.L)
         self.kx = np.fft.rfftfreq(self.L, d=1./(2*np.pi))
         # For mirror padding
         self.kx2 = np.fft.rfftfreq(2*self.L, d=1./(2*np.pi))
-
-        #if hasfftw:
-        #    self.FFT = FFT(imag0.shape, **kwargs)
-        #    self.FFT2 = FFT(2*np.array(imag0.shape), **kwargs)
-        #    self.fft2 = self.FFT.fft2
-        #    self.ifft2 = self.FFT.ifft2
-        #    self.fft22 = self.FFT2.fft2
-        #    self.ifft22 = self.FFT2.ifft2
-        #else:
-        #    self.fft2 = np.fft.rfft2
-        #    self.ifft2 = np.fft.irfft2
-        #    self.fft22 = np.fft.rfft2
-        #    self.ifft22 = np.fft.irfft2
 
         self.initialize(imag1)
 
@@ -119,7 +104,7 @@ class Register(object):
             return np.clip(-x+len(x)+d, 0, 1)
 
     def _sigmoid_mask(self, x, d, **kwargs):
-        w, o = kwargs.get('w', 0.5), kwargs.get('o', 3)
+        w, o = kwargs.get('w', 0.5), kwargs.get('o', 4)
         L = len(x)-1
         if d >= 0:
             return expit((x-d-o)/w)*expit(-(x-L+o)/w)
@@ -213,7 +198,7 @@ class Register(object):
         cost = self.cost(delta_bestfit, imag1, imag0)
         return np.sqrt(2*cost)
 
-    def minimize(self, delta0=None, imag1=None, imag0=None, method="Nelder-Mead",
+    def fit(self, delta0=None, imag1=None, imag0=None, method="Nelder-Mead",
                  **kwargs):
         """
         Register two images by optimizing translationg of imag1
