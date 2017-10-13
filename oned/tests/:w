@@ -1,0 +1,96 @@
+import sys
+sys.path.append('../')
+import numpy as np
+from copy import deepcopy
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+
+import fourier_register as fr
+
+
+class BiasTest(object):
+    def __init__(self, data_kwargs, **kwargs):
+        self.data_kwargs = data_kwargs
+        self.shifts = self.data_kwargs.get('shifts', np.random.randn(2))
+        self.N = kwargs.pop('N', 1000)
+        self.noises = kwargs.pop('noises', np.linspace(0.01, 0.15, 10))
+
+        self._regkwargs = kwargs.copy()
+        self.setdata(data_kwargs)
+        self.reg = fr.SuperRegistration(*self.data, **kwargs)
+
+    def setdata(self, data_kwargs):
+        args, kwargs = data_kwargs
+        self.data, self.s, self.true, _ = fr.fakedata(*args, **kwargs)
+
+    def getdata(self, noise):
+        img1, img0 = self.data
+        shape = img1.shape
+        rnd1, rnd0 = np.random.randn(*shape), np.random.randn(*shape)
+        return img1+noise*rnd1, img0+noise*rnd0
+
+    def repeat(self, noise):
+        p1s, p1_sigmas = [], []
+        for i in range(self.N):
+            img1, img0 = self.getdata(noise)
+            ly, lx = img1.shape
+            p1, p1_sigma, msg = self.reg.minimize(imag1=img1, imag0=img0, 
+                                                  method='L-BFGS-B',
+                                                  bounds=((-10,10),(-10,10)))
+            p1s += [p1]
+            p1_sigmas += [p1_sigma]
+        return p1s, p1_sigmas
+
+    def noiseloop(self):
+        results = {'bias': [], 'biaserr': [], 'err': []}
+        alldata = []
+        for n in self.noises:
+            p1s, p1_sigmas = self.repeat(n)
+            alldata += [[p1s, p1_sigmas]]
+            results['bias'] += [np.mean(p1s,0)-self.delta]
+            results['biaserr'] += [np.std(p1s,0)/np.sqrt(len(p1s))]
+            results['err'] += [np.mean(p1_sigmas, 0)]
+        return results, np.array(alldata)
+
+    def deltaloop(self, deltas, noise=0.075):
+        results = {'bias': [], 'biaserr': [], 'err': []}
+        alldata = []
+        dkwargs = deepcopy(self.data_kwargs)
+        for d in deltas:
+            dkwargs['delta'] = d
+            self.setdata(dkwargs)
+            p1s, p1_sigmas = self.repeat(noise)
+            alldata += [[p1s, p1_sigmas]]
+            results['bias'] += [np.mean(p1s,0)-d]
+            results['biaserr'] += [np.std(p1s,0)/np.sqrt(len(p1s))]
+            results['err'] += [np.mean(p1_sigmas, 0)]
+        return results, np.array(alldata)
+
+    def plotbias(self, results, abscissa=None, xlabel=None, axis=None, title=None):
+        biases = np.array(results['bias'])
+        biases_std = np.array(results['biaserr'])
+        err = np.array(results['err'])
+
+        if axis is None:
+            fig, axs = plt.subplots()
+        else:
+            axs = axis
+
+        abscissa = abscissa if abscissa is not None else self.noises
+        xlabel = xlabel if xlabel is not None else "Noise level $\sigma$"
+
+        axs.errorbar(abscissa, biases[:,0],
+                     yerr = biases_std[:,0], label=r"$\Delta_y$ bias",
+                     linestyle="-", marker="o")
+        axs.errorbar(abscissa, biases[:,1],
+                     yerr = biases_std[:,1], label=r"$\Delta_x$ bias",
+                     linestyle="-", marker="o")
+        axs.plot(abscissa, err[:,0], ':o', label=r"std$\Delta_y$")
+        axs.plot(abscissa, err[:,1], ':o', label=r"std$\Delta_x$")
+
+        axs.set_xlabel(xlabel)
+        axs.set_ylabel(r"$\langle\Delta\rangle - \Delta_\mathrm{true}$")
+        if title: axs.set_title(title)
+        axs.legend(loc='best')
+        return plt.gcf(), axs
