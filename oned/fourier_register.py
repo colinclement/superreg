@@ -139,12 +139,28 @@ class SuperRegistration(object):
 
         return np.array(j).T
 
-    def fit(self, **kwargs):
+    def estimatenoise(self, params=None):
+        if params is not None:
+            self.set_params(params)
+        else:
+            params = self.params
+        r = self.res(params)
+        return np.sqrt(r.dot(r)/(2*len(r)))
+
+    def fit(self, images=None, p0=None, **kwargs):
+        if images is not None:  # reset images and parameters
+            self.images = images
+            self.params = np.random.randn(len(params))/np.sqrt(len(params))
+        p0 = p0 if p0 is not None else self.params
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             lm = LM(self.res, self.grad)
-            self.sol = lm.leastsq(self.params, **kwargs)
-            return self.sol[0][:self.N-1]
+            self.sol = lm.leastsq(p0, **kwargs)
+        j = self.grad()
+        jtj = j.T.dot(j)
+        sigma = self.estimatenoise()
+
+        return self.sol[0][:self.N-1], sigma/np.sqrt(jtj.diagonal()[:self.N-1])
 
 
 class Fourier(object):
@@ -261,10 +277,11 @@ class OneDRegister(object):
         self.sol = lm.leastsq(p0, **kwargs)
         return self.sol[0][:len(self.shifts)]
 
-def fakedata(N, L, noise, shifts=None, deg=DEGREE):
+def fakedata(N, L, noise, shifts=None, coef=None, deg=None):
     shifts = shifts if shifts is not None else rng.rand(N-1)
+    coef = coef if coef is not None else rng.randn(2*deg-1)
     x = np.arange(L)
-    fourier = Fourier(x, x, deg, coef=rng.randn(2*deg-1))
+    fourier = Fourier(x, x, deg or (len(coef)+1)/2, coef=coef)
     seq = np.array([fourier(x)] + [fourier(x+s) for s in shifts])
     seq /= seq[0].ptp()
     return seq+noise*rng.randn(*seq.shape), shifts, seq, fourier
