@@ -150,7 +150,6 @@ class SuperRegistration(object):
     def fit(self, images=None, p0=None, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
-            self.params = np.random.randn(len(params))/np.sqrt(len(params))
         p0 = p0 if p0 is not None else self.params
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
