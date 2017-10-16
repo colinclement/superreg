@@ -94,8 +94,7 @@ class Register(object):
         else:
             imag_k = self.imag1_k if imag is None else np.fft.rfft(imag)
             kx = self.kx
-        # NOTE: I choose a convention for shifts here
-        return np.fft.irfft(imag_k * np.exp(1.j * delta * kx))[:self.L]
+        return np.fft.irfft(imag_k * np.exp(-1.j * delta * kx))[:self.L]
 
     def _linear_interp_mask(self, x, d, **kwargs):
         if d >= 0:
@@ -175,7 +174,7 @@ class Register(object):
         imag1_k, imag0_k = np.fft.rfft(imag1), np.fft.rfft(imag0)
         corr = np.fft.fftshift(np.fft.irfft(imag1_k*imag0_k.conj()))
         maxind = np.argmax(corr)
-        return maxind - L/2.
+        return -(maxind - L/2.)
 
     def estimatenoise(self, delta_bestfit, images=None):
         """
