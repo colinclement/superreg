@@ -3,7 +3,7 @@ sys.path.append('../')
 import numpy as np
 from copy import deepcopy
 import matplotlib as mpl
-#mpl.use('Agg')
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 import fourier_register as fr
@@ -28,44 +28,37 @@ class BiasTest(object):
     def getdata(self, noise):
         return self.data + noise * np.random.randn(*self.data.shape)
 
-    def repeat(self, noise):
+    def repeat(self, noise, **kwargs):
         p1s, p1_sigmas = [], []
         for i in range(self.N):
-            p1, p1_sigma = self.reg.fit(self.getdata(noise))
+            p1, p1_sigma = self.reg.fit(self.getdata(noise), **kwargs)
             p1s += [p1]
             p1_sigmas += [p1_sigma]
         return p1s, p1_sigmas
 
-    def noiseloop(self):
-        #results = {'bias': [], 'biaserr': [], 'err': []}
+    def noiseloop(self, **kwargs):
         alldata = []
         shifts = self.data_kwargs['shifts']
         for n in self.noises:
             p1s, p1_sigmas = self.repeat(n)
             alldata += [[p1s, p1_sigmas]]
-            #results['bias'] += [np.mean(p1s, 0)-shifts]
-            #results['biaserr'] += [np.std(p1s, 0)/np.sqrt(len(p1s))]
-            #results['err'] += [np.mean(p1_sigmas, 0)]
         return np.array(alldata)
 
-    def deltaloop(self, deltas, noise=0.075):
-        #results = {'bias': [], 'biaserr': [], 'err': []}
+    def deltaloop(self, deltas, noise=0.075, **kwargs):
         alldata = []
         dkwargs = deepcopy(self.data_kwargs)
         for d in deltas:
             dkwargs['shifts'] = d
             self.setdata(dkwargs)
-            p1s, p1_sigmas = self.repeat(noise)
+            p1s, p1_sigmas = self.repeat(noise, **kwargs)
             alldata += [[p1s, p1_sigmas]]
-            #results['bias'] += [np.mean(p1s, 0)-d]
-            #results['biaserr'] += [np.std(p1s, 0)/np.sqrt(len(p1s))]
-            #results['err'] += [np.mean(p1_sigmas, 0)]
         return np.array(alldata)
 
     def plotbias(self, results, abscissa=None, xlabel=None, axis=None, title=None):
         biases = np.array(results['bias'])
         biases_std = np.array(results['biaserr'])
         err = np.array(results['err'])
+        bias_std = np.array(results['bias_std'])
 
         if axis is None:
             fig, axs = plt.subplots()
@@ -79,6 +72,7 @@ class BiasTest(object):
                      yerr = biases_std, label=r"$\Delta$ bias",
                      linestyle="-", marker="o")
         axs.plot(abscissa, err, ':o', label=r"std$\Delta$")
+        axs.plot(abscissa, bias_std, label=r"std(bias)")
 
         axs.set_xlabel(xlabel)
         axs.set_ylabel(r"$\langle\Delta\rangle - \Delta_\mathrm{true}$")

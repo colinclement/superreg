@@ -145,7 +145,7 @@ class SuperRegistration(object):
         else:
             params = self.params
         r = self.res(params)
-        return np.sqrt(r.dot(r)/(2*len(r)))
+        return np.sqrt(r.dot(r)/len(r))
 
     def fit(self, images=None, p0=None, **kwargs):
         if images is not None:  # reset images and parameters
@@ -276,66 +276,29 @@ class OneDRegister(object):
         self.sol = lm.leastsq(p0, **kwargs)
         return self.sol[0][:len(self.shifts)]
 
-def fakedata(N, L, noise, shifts=None, coef=None, deg=None):
+def fakedata(N, L, noise, shifts=None, domain=None, coef=None, deg=None):
     shifts = shifts if shifts is not None else rng.rand(N-1)
     coef = coef if coef is not None else rng.randn(2*deg-1)
     x = np.arange(L)
-    fourier = Fourier(x, x, deg or (len(coef)+1)/2, coef=coef)
+    fourier = Fourier(x, x, deg or (len(coef)+1)/2, coef=coef, domain=domain)
     seq = np.array([fourier(x)] + [fourier(x+s) for s in shifts])
     seq /= seq[0].ptp()
     return seq+noise*rng.randn(*seq.shape), shifts, seq, fourier
 
-def fit(images, deg=DEGREE, itn=10, shifts=None, iprint=True):
-    reg = OneDRegister(images, deg=deg, shifts=shifts)
-    for i in xrange(itn):
-        if iprint:
-            print(reg.shifts, reg.loglikelihood)
-        reg = OneDRegister(images, deg=reg.deg, shifts=reg.shifts)
-        reg.shifts = reg.optimize()
-    return reg
-
-def evaluatebias(num=200, N=2, L=128, noise=0.01, itn=5, deg=20, expt=None):
-    data, s, true, fourier = expt or fakedata(N, L, noise)
-    results = []
-    models = []
-    for i in range(num):
-        d = true + noise*rng.randn(*true.shape)
-        reg = OneDRegister(d, deg, shifts = np.array([rng.rand()])) 
-        sol = reg.fit()
-        results += [sol]
-        models += [reg]
-    bias = np.mean(np.array(results)-s)
-    bias_std = np.std(np.array(results)-2)/np.sqrt(num)
-    return bias, bias_std, np.array(results), reg, models
-   
-def single_point_bias(N=2000, noise=0.05):
-    degree = 35 #DEGREE
-    shift = np.random.rand()
-    expt = data, s, true, fourier = fakedata(
-        2, 124, noise, shifts=[shift], deg=degree
-    )
-    fits = []
-    for i in range(N):
-        reg = SuperRegistration(true + noise*rng.randn(*true.shape), deg=degree)
-        fits.append(reg.fit())
-        print(i, reg.shifts - shift)
-
-    return np.array(fits), shift
 
 if __name__=="__main__":
+    from varibayes.infer import VariationalInferenceMF
     degree = 37 # DEGREE
     expt = fakedata(2, 124, 0.05, deg=40)
     data, s, true, fourier = expt
-    reg = OneDRegister(data, deg=degree)
 
-    #biases = []
-    #biases_std = []
-    #noises = np.linspace(0.1, 0.15, 4)
-    #for n in noises:
-    #    bias, bias_std, results, reg, models = evaluatebias(2000, noise=n, expt=expt) 
-    #    biases += [bias]
-    #    biases_std += [bias_std]
-    #    print(n, bias, bias_std)
-    #errorbar(noises, biases, yerr=biases_std)
-    #show()
+    reg = SuperRegistration(data, 40)
+    def loglikelihood(params, data):
+        s = params[-1]
+        r = (reg.res(params[:-1]) - data)/sigmas
+        return - np.sum(r*r + np.sum(2*np.pi*s**2))/2.
+    p0 = np.hstack([reg.params/10., 0.05])
 
+    vb = VariationalInferenceMF(loglikelihood, args=(data,))
+    vb.fit(p0, iprint=5, itn=1000)
+        
