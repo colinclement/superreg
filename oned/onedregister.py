@@ -193,7 +193,7 @@ class Register(object):
             sigma : float, optimal sigma assuming best fit cost
         """
         cost = self.cost(delta_bestfit, images)
-        return np.sqrt(2*cost)
+        return np.sqrt(cost*2.)
 
     def fit(self, images=None, delta0=None, **kwargs):
         """
