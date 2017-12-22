@@ -26,9 +26,9 @@ def mirrorpad(imag):
     imag_mirror[Ly:,Lx:] = imag[::-1,::-1]
     return imag_mirror
 
-def sliceL(L, offset=np.array(data.shape)/4):
+def sliceL(L, offset=np.array(data.shape)//4):
     """ Return slice object of side-length L """
-    oy, ox = offset
+    oy, ox = map(int, offset)
     return np.s_[oy:oy+L, ox:ox+L]
 
 def gaussianimage(size, y, x, sy, sx):
@@ -62,7 +62,7 @@ def randomblur(size, sx, sy, rng = np.random):
     return img/img.max()
 
 def fakedata(noise, shifts=[np.zeros(2)], L=64, sliceobj=None,
-             offset=np.array(data.shape)/4, img=data):
+             offset=np.array(data.shape)//4, img=data):
     """
     Make fake data from img with relative shifts, 
     some size determined by sliceobj, and some noise added.

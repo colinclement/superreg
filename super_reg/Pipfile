@@ -10,6 +10,8 @@ name = "pypi"
 scipy = "*"
 numpy = "*"
 pyfftw = "*"
+matplotlib = "*"
+numexpr = "*"
 
 
 [dev-packages]
