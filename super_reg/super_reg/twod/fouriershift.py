@@ -1,5 +1,5 @@
 """
-register.py
+fouriershift.py
 
 author: Colin Clement
 date: 2017-06-06
@@ -15,7 +15,7 @@ try:
 except ImportError as ierr:
     print("Install pyfftw for 20x speedup")
     hasfftw = False
-import leastsq
+import super_reg.util.leastsq as leastsq
 from scipy.optimize import minimize
 from scipy.special import expit
 
