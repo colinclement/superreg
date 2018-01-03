@@ -36,60 +36,71 @@ class SuperRegistration(object):
         self.images = images
         self.shifts = shifts
         self.N = len(self.images)
-        self.L = len(self.images[0])
+        self.shape = self.images[0].shape
 
         if self.shifts is None:
-            self.shifts = rng.rand(len(self.images)-1)
+            self.shifts = rng.rand(self.N-1, 2)
 
-        self.coef = np.random.randn(2*deg, 2*deg)
+        self.coef = np.random.randn(deg+1, deg+1)
 
-        self.x = 1.*np.arange(images[0].shape[0])
-        self.y = 1.*np.arange(iamges[0].shape[1])[:,None]
+        self.x = 1. * np.arange(self.shape[1])
+        self.y = 1. * np.arange(self.shape[0])
+        self.yx = np.meshgrid(self.y, self.x, indexing='ij')
+        self.yx = np.rollaxis(np.array(self.yx), 0, 3)
 
-        self.kx = 2*np.pi*np.arange(self.deg)
-        self.ky = self.ky[:,None]
+        self.kx = 2 * np.pi * np.arange(self.deg+1)
+        self.ky = 2 * np.pi * np.arange(self.deg+1)
+        self.kyx = 2 * np.pi * self.yx
 
-        if domain is not None:
-            self.domain = domain
-        else:
-            self.domain = np.array(
-                [[self.y.min(), self.y.min() + self.y.ptp()],
-                 [self.x.min(), self.x.max() + self.x.ptp()]]
-            )
-
-        # two different sums, one for 
-        self.sinkx = np.sin(self.k[:,None] * self.coord(self.x)[None,:])
-        self.coskx = np.cos(self.k[:,None] * self.coord(self.x)[None,:])
+    def domain(self, shifts=None):
+        """   Smallest rectangle containing all shifted images  """
+        shifts = shifts if shifts is not None else self.shifts
+        ymin, xmin = np.min(shifts, 0)
+        ymax, xmax = np.max(shifts, 0)
+        ymin = min(ymin, 0)
+        xmin = min(xmin, 0)
+        ymax = max(ymax + self.shape[1], self.shape[1]) 
+        xmax = max(xmax + self.shape[0], self.shape[0]) 
+        return np.array([[ymin, ymax], [xmin, xmax]])
 
     def set_params(self, params):
-        self.shifts = params[:len(self.shifts)]
-        self.coef = params[len(self.shifts):]
+        M = 2 * (self.N - 1)
+        self.shifts = params[:M].reshape(self.N-1, 2)
+        self.coef = params[M:].reshape(* (2 * (self.deg + 1,)))
 
     @property
     def params(self):
-        return np.hstack([self.shifts, self.coef])
+        return np.hstack([self.shifts.ravel(), self.coef.ravel()])
 
     @property
     def model(self):
-        return np.array([self(self.x)] + [self(self.x + s) for s in self.shifts])
+        y, x = self.y, self.x
+        return np.array([self(y, x)] + 
+                        [self(y + sy, x + sx) for (sy, sx) in self.shifts])
+
+    def coord(self, y, x, shifts=None):
+        """ 
+        Note that we use a quarter of domain as we impose mirror symmetry
+        """
+        domain = self.domain(shifts)
+        return ((y - domain[1, 0]) / (2 * (domain[1, 1] - domain[1, 0])),
+                (x - domain[0, 0]) / (2 * (domain[0, 1] - domain[0, 0])))
+
+    def __call__(self, y, x, shifts=None):
+        cy, cx = self.coord(y, x, shifts)
+        cy, cx = cy[None,:], cx[None,:]
+        ky, kx = self.ky[:, None], self.kx[:,None]
+        xarg = ne.evaluate('exp(-1j * kx * cx)')
+        yarg = ne.evaluate('exp(-1j * ky * cy)')
+        return self.coef.dot(yarg).T.dot(xarg).real
 
     @property
-    def An(self):
-        return self.coef[:self.deg]
+    def residual(self):
+        return self.model - self.images
 
     @property
-    def Bn(self):
-        return self.coef[self.deg:]
-
-    def coord(self, x):
-        return (x - self.domain[0]) / (self.domain[1] - self.domain[0])
-
-    def __call__(self, x):
-        arg = np.outer(self.coord(x), self.k)
-        return (
-            np.sin(arg).dot(self.An) +
-            np.cos(arg).dot(self.Bn)
-        )
+    def residual_k(self):
+        return np.abs(np.fft.fftn(self.residual, (1,2)))**2
 
     def res(self, params=None):
         params = params if params is not None else self.params
@@ -170,9 +181,11 @@ class SuperRegistration(object):
         p0 = p0 if p0 is not None else self.params
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            lm = LM(self.res, self.grad)
+            #lm = LM(self.res, self.grad)
+            lm = LM(self.res, self.jac)
             self.sol = lm.leastsq(p0, **kwargs)
-        j = self.grad()
+        #j = self.grad()
+        j = self.jac()
         jtj = j.T.dot(j)
         sigma = self.estimatenoise()
 
@@ -180,18 +193,14 @@ class SuperRegistration(object):
 
 
 if __name__=="__main__":
-    from varibayes.infer import VariationalInferenceMF
-    degree = 37 # DEGREE
-    expt = fakedata(2, 124, 0.05, deg=40)
-    data, s, true, fourier = expt
+    
+    deg = 8
+    datamaker = SuperRegistration(np.zeros((2,32,32)), deg=deg)
+    images = datamaker.model
+    shifts = datamaker.shifts.copy()
+    images /= images.std()
+    data = images + 0.05 * np.random.randn(*images.shape)
 
-    reg = SuperRegistration(data, 40)
-    def loglikelihood(params, data):
-        s = params[-1]
-        r = (reg.res(params[:-1]) - data)/sigmas
-        return - np.sum(r*r + np.sum(2*np.pi*s**2))/2.
-    p0 = np.hstack([reg.params/10., 0.05])
+    reg = SuperRegistration(data, deg)
+    reg.fit(iprint=2, )
 
-    vb = VariationalInferenceMF(loglikelihood, args=(data,))
-    vb.fit(p0, iprint=5, itn=1000)
-        
