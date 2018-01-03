@@ -12,6 +12,12 @@ DEGREE = 20
 
 rng = np.random.RandomState(14850)
 
+#TODO: 
+#   1. Test for biases with finite difference derivative
+#   2. Implement correct gradient for coefficients
+#   3. Make and test fake data that isn't perfectly representable
+#   4. Investigate model complexity
+
 
 class SuperRegistration(object):
     def __init__(self, images, deg, shifts=None, domain=None):
