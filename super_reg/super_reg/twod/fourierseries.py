@@ -194,8 +194,10 @@ class SuperRegistration(object):
         j = self.jac()
         jtj = j.T.dot(j)
         sigma = self.estimatenoise()
+        shifts = self.shifts
+        jtjshifts = jtj.diagonal()[:shifts.size].reshape(*shifts.shape)
 
-        return self.sol[0][:self.N-1], sigma/np.sqrt(jtj.diagonal()[:self.N-1])
+        return shifts, sigma/np.sqrt(jtjshifts)
 
 
 if __name__=="__main__":
@@ -208,5 +210,5 @@ if __name__=="__main__":
     data = images + 0.05 * np.random.randn(*images.shape)
 
     reg = SuperRegistration(data, deg)
-    reg.fit(iprint=2, )
+    s1, s1_sigma = reg.fit(iprint=2,)
 
