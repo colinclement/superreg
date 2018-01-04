@@ -51,12 +51,14 @@ class SuperRegistration(object):
 
         self.x = 1. * np.arange(self.shape[1])
         self.y = 1. * np.arange(self.shape[0])
-        self.yx = np.meshgrid(self.y, self.x, indexing='ij')
-        self.yx = np.rollaxis(np.array(self.yx), 0, 3)
+        #self.yx = np.meshgrid(self.y, self.x, indexing='ij')
+        #self.yx = np.rollaxis(np.array(self.yx), 0, 3)
 
-        self.kx = 2 * np.pi * np.arange(self.deg+1)
         self.ky = 2 * np.pi * np.arange(self.deg+1)
-        self.kyx = 2 * np.pi * self.yx
+        self.kx = 2 * np.pi * np.arange(self.deg+1)
+        #self.ky = 2 * np.pi * np.arange(-self.deg, self.deg+1)
+        #self.kx = 2 * np.pi * np.arange(-self.deg, self.deg+1)
+        #self.kyx = 2 * np.pi * self.yx
 
     def domain(self, shifts=None):
         """   Smallest rectangle containing all shifted images  """
@@ -65,8 +67,8 @@ class SuperRegistration(object):
         ymax, xmax = np.max(shifts, 0)
         ymin = min(ymin, 0)
         xmin = min(xmin, 0)
-        ymax = max(ymax + self.shape[1], self.shape[1]) 
-        xmax = max(xmax + self.shape[0], self.shape[0]) 
+        ymax = max(ymax + self.shape[0], self.shape[0]) 
+        xmax = max(xmax + self.shape[1], self.shape[1]) 
         return np.array([[ymin, ymax], [xmin, xmax]])
 
     def set_params(self, params):
@@ -76,7 +78,7 @@ class SuperRegistration(object):
 
     @property
     def params(self):
-        return np.hstack([self.shifts.ravel(), self.coef.ravel()])
+        return np.concatenate((self.shifts.ravel(), self.coef.ravel()))
 
     @property
     def model(self):
@@ -84,21 +86,28 @@ class SuperRegistration(object):
         return np.array([self(y, x)] + 
                         [self(y + sy, x + sx) for (sy, sx) in self.shifts])
 
+    @property
+    def c(self):
+        return np.concatenate((self.coef[:,1:][:,::-1], self.coef), axis=1)
+
     def coord(self, y, x, shifts=None):
         """ 
         Note that we use a quarter of domain as we impose mirror symmetry
         """
-        domain = self.domain(shifts)
-        return ((y - domain[1, 0]) / (2 * (domain[1, 1] - domain[1, 0])),
-                (x - domain[0, 0]) / (2 * (domain[0, 1] - domain[0, 0])))
+        dy, dx = self.domain(shifts)
+        return ((y - dy[0]) / (2. * (dy[1] - dy[0])),
+                (x - dx[0]) / (2. * (dx[1] - dx[0])))
 
     def __call__(self, y, x, shifts=None):
         cy, cx = self.coord(y, x, shifts)
         cy, cx = cy[None,:], cx[None,:]
-        ky, kx = self.ky[:, None], self.kx[:,None]
-        xarg = ne.evaluate('exp(-1j * kx * cx)')
-        yarg = ne.evaluate('exp(-1j * ky * cy)')
-        return self.coef.dot(yarg).T.dot(xarg).real
+        ky, kx = self.ky[:, None], self.kx[:, None]
+        #xarg = ne.evaluate('exp(-1j * kx * cx)')
+        #yarg = ne.evaluate('exp(-1j * ky * cy)')
+        # NOTE: This ensures mirror symmetry
+        xarg = ne.evaluate('cos(kx * cx)')
+        yarg = ne.evaluate('cos(ky * cy)')
+        return self.coef.T.dot(yarg).T.dot(xarg)
 
     @property
     def residual(self):
@@ -106,7 +115,7 @@ class SuperRegistration(object):
 
     @property
     def residual_k(self):
-        return np.abs(np.fft.fftn(self.residual, (1,2)))**2
+        return np.abs(np.fft.fftn(self.residual, axes=(1,2)))**2
 
     def res(self, params=None):
         params = params if params is not None else self.params
@@ -114,20 +123,24 @@ class SuperRegistration(object):
 
         return (self.model - self.images).ravel()
 
+    #def gradshifts(self, shifts=None):
+    #    shifts = shifts if shifts is not None else self.shifts
+
+    #    args = self.coord(shifts[:,None] * self.k[None,:])
+    #    sinkd = ne.evaluate('sin(args)')
+    #    coskd = ne.evaluate('cos(args)')
+
+    #    cn = self.An*self.k
+    #    cm = self.Bn*self.k
+
+    #    dIds_n = (cn*coskd).dot(self.coskx) - (cn*sinkd).dot(self.sinkx)
+    #    dIds_m = (cm*sinkd).dot(self.coskx) + (cm*coskd).dot(self.sinkx)
+
+    #    return (dIds_n - dIds_m) / np.diff(self.domain)
     def gradshifts(self, shifts=None):
         shifts = shifts if shifts is not None else self.shifts
 
-        args = self.coord(shifts[:,None] * self.k[None,:])
-        sinkd = ne.evaluate('sin(args)')
-        coskd = ne.evaluate('cos(args)')
 
-        cn = self.An*self.k
-        cm = self.Bn*self.k
-
-        dIds_n = (cn*coskd).dot(self.coskx) - (cn*sinkd).dot(self.sinkx)
-        dIds_m = (cm*sinkd).dot(self.coskx) + (cm*coskd).dot(self.sinkx)
-
-        return (dIds_n - dIds_m) / np.diff(self.domain)
 
     def gradcoef(self):
         allcoords = np.hstack([self.x] + [self.x + s for s in self.shifts])
