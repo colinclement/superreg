@@ -1,6 +1,7 @@
 import warnings
 import numpy as np
 import numexpr as ne
+from itertools import chain
 
 from scipy.optimize import golden, leastsq
 from matplotlib.pyplot import *
@@ -51,14 +52,9 @@ class SuperRegistration(object):
 
         self.x = 1. * np.arange(self.shape[1])
         self.y = 1. * np.arange(self.shape[0])
-        #self.yx = np.meshgrid(self.y, self.x, indexing='ij')
-        #self.yx = np.rollaxis(np.array(self.yx), 0, 3)
 
         self.ky = 2 * np.pi * np.arange(self.deg+1)
         self.kx = 2 * np.pi * np.arange(self.deg+1)
-        #self.ky = 2 * np.pi * np.arange(-self.deg, self.deg+1)
-        #self.kx = 2 * np.pi * np.arange(-self.deg, self.deg+1)
-        #self.kyx = 2 * np.pi * self.yx
 
     def domain(self, shifts=None):
         """   Smallest rectangle containing all shifted images  """
@@ -81,14 +77,13 @@ class SuperRegistration(object):
         return np.concatenate((self.shifts.ravel(), self.coef.ravel()))
 
     @property
-    def model(self):
-        y, x = self.y, self.x
-        return np.array([self(y, x)] + 
-                        [self(y + sy, x + sx) for (sy, sx) in self.shifts])
+    def shiftiter(self):
+        return chain([np.zeros(2)], self.shifts)
 
     @property
-    def c(self):
-        return np.concatenate((self.coef[:,1:][:,::-1], self.coef), axis=1)
+    def model(self):
+        y, x = self.y, self.x
+        return np.array([self(y + sy, x + sx) for (sy, sx) in self.shiftiter])
 
     def coord(self, y, x, shifts=None):
         """ 
@@ -102,9 +97,6 @@ class SuperRegistration(object):
         cy, cx = self.coord(y, x, shifts)
         cy, cx = cy[None,:], cx[None,:]
         ky, kx = self.ky[:, None], self.kx[:, None]
-        #xarg = ne.evaluate('exp(-1j * kx * cx)')
-        #yarg = ne.evaluate('exp(-1j * ky * cy)')
-        # NOTE: This ensures mirror symmetry
         xarg = ne.evaluate('cos(kx * cx)')
         yarg = ne.evaluate('cos(ky * cy)')
         return self.coef.T.dot(yarg).T.dot(xarg)
