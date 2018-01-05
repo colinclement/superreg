@@ -68,7 +68,7 @@ class BiasTest(object):
                      yerr = biases_std, label=r"$\Delta$ bias",
                      linestyle="-", marker="o")
         axs.plot(abscissa, err, ':o', label=r"std$\Delta$")
-        axs.plot(abscissa, bias_std, label=r"std(bias)")
+        #axs.plot(abscissa, bias_std, label=r"std(bias)")
 
         axs.set_xlabel(xlabel)
         axs.set_ylabel(r"$\langle\Delta\rangle - \Delta_\mathrm{true}$")
