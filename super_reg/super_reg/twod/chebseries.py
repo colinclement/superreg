@@ -5,6 +5,7 @@ from itertools import chain
 
 from matplotlib.pyplot import *
 from numpy.polynomial.chebyshev import chebval, chebval2d
+from numpy.linalg import slogdet
 
 from super_reg.util.leastsq import LM
 
@@ -47,9 +48,7 @@ class SuperRegistration(object):
         if self.shifts is None:
             self.shifts = rng.rand(self.N-1, 2)
 
-        self.coef = np.random.randn(deg+1, deg+1)
-        a = np.arange(1, deg+2)
-        self.coef *= np.exp(-np.outer(a, a)/10.)
+        self.coef = np.random.randn(deg+1, deg+1)/(deg+1.)
 
         self.x = 1. * np.arange(self.shape[1])
         self.y = 1. * np.arange(self.shape[0])
@@ -192,11 +191,22 @@ class SuperRegistration(object):
 
         return shifts, sigma/np.sqrt(jtjshifts)
 
+    def evidence(self, sigma=None):
+        s = sigma or self.estimatenoise()
+        r = self.res()
+        N = len(self.params)
+        J = self.grad()
+        logdet = slogdet(J.T.dot(J))[1]
+        return (-r.dot(r)/s**2 + N*np.log(2*np.pi*s**2) - logdet)/2.
+
 
 if __name__=="__main__":
     
     from scipy.misc import face
     import super_reg.twod.fourierseries as fs
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
+    from matplotlib.cm import copper
 
     deg = 8
     L = 32
@@ -209,5 +219,45 @@ if __name__=="__main__":
     data = fdata + 0.05 * np.random.randn(*fdata.shape)
 
     reg = SuperRegistration(data, 16)
-    print(reg.fit(iprint=2, delta=1E-4))
+    #print(reg.fit(iprint=2, delta=1E-4))
+    evd, bias = [], []
+    fig, ax = plt.subplots(1, 2)
+    order = list(range(10, 25))
+    nlist = list(range(2,9))
+    colors = copper(Normalize()(nlist))
+    shifts = np.random.randn(max(nlist)-1, 2)
 
+    datalist = []
+    biases = []
+    evidences = []
+
+    # This sequence plots the evidence as a function of complexity as a
+    # function of the number of images
+    
+    for n, c in zip(nlist, colors):
+        dm = fs.SuperRegistration(np.zeros((n, L, L)), deg)
+        dm.coef = datamaker0.coef
+        dm.shifts = shifts[:n-1]
+        data = dm.model/dm.model.std()
+        data += 0.05 * np.random.randn(*data.shape)
+        datalist += [data]
+
+        bias, evd = [], []
+        print('{} images'.format(n))
+        for i in order:
+            reg = SuperRegistration(data, i)
+            s, _ = reg.fit(delta=1E-7)
+            e = reg.evidence(sigma=0.05)
+            print('\ti = {}, e = {}'.format(i, e))
+            bias.append(np.abs((s - dm.shifts)[0]))
+            evd.append(e)
+        biases.append(bias)
+        evidences.append(evd)
+
+        ax[0].plot(order, bias, c = c, label='n = {}'.format(n))
+        ax[1].plot(order, np.array(evd)/n, c = c, label='n = {}'.format(n))
+
+    plt.legend()
+    ax[0].set_title('Error in shift reconstruction')
+    ax[1].set_title('Evidence per image')
+    plt.show()
