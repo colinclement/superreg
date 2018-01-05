@@ -202,19 +202,12 @@ if __name__=="__main__":
     L = 32
     datamaker0 = fs.SuperRegistration(np.zeros((2, L, L)), deg=deg)
     datamaker0.shifts = np.array([3*np.random.randn(2)])
+    shifts = datamaker0.shifts
     fdata = datamaker0.model
     fdata /= fdata.std()
 
-    #data = face().mean(2)[:32,:32]/255.
-    #datamaker = SuperRegistration(np.array([data, data]), deg=deg)
-    #datamaker.fit()
-    #datamaker.shifts = np.array([3*np.random.randn(2)])
-
-    #images = datamaker.model
-    #images /= images.std()
-
     data = fdata + 0.05 * np.random.randn(*fdata.shape)
 
-    reg = SuperRegistration(data, 18)
-    s1, s1_sigma = reg.fit(iprint=2,)
+    reg = SuperRegistration(data, 16)
+    print(reg.fit(iprint=2, delta=1E-4))
 
