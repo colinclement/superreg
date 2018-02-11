@@ -3,9 +3,9 @@ import numpy as np
 import numexpr as ne
 from itertools import chain
 
-from scipy.optimize import golden, leastsq
 from matplotlib.pyplot import *
-from scipy.ndimage import gaussian_filter
+from numpy.polynomial.chebyshev import chebval, chebval2d
+from numpy.linalg import slogdet
 
 from super_reg.util.leastsq import LM
 
@@ -48,13 +48,11 @@ class SuperRegistration(object):
         if self.shifts is None:
             self.shifts = rng.rand(self.N-1, 2)
 
-        self.coef = np.random.randn(deg+1, deg+1)
+        self.coef = np.random.randn(deg+1, deg+1)/(deg+1.)
 
         self.x = 1. * np.arange(self.shape[1])
         self.y = 1. * np.arange(self.shape[0])
-
-        self.ky = 2 * np.pi * np.arange(self.deg+1)
-        self.kx = 2 * np.pi * np.arange(self.deg+1)
+        self.yg, self.xg = np.meshgrid(self.y, self.x, indexing='ij')
 
     def domain(self, shifts=None):
         """   Smallest rectangle containing all shifted images  """
@@ -82,24 +80,20 @@ class SuperRegistration(object):
 
     @property
     def model(self):
-        y, x = self.y, self.x
+        y, x = self.yg, self.xg
         return np.array([self(y + sy, x + sx) for (sy, sx) in self.shiftiter])
 
     def coord(self, y, x, shifts=None):
         """ 
-        Note that we use a quarter of domain as we impose mirror symmetry
+        Chebyshev domain is [-1,1]
         """
         dy, dx = self.domain(shifts)
-        return ((y - dy[0]) / (2. * (dy[1] - dy[0])),
-                (x - dx[0]) / (2. * (dx[1] - dx[0])))
+        return (2 * (y - dy[0]) / (dy[1] - dy[0]) - 1,
+                2 * (x - dx[0]) / (dx[1] - dx[0]) - 1)
 
     def __call__(self, y, x, shifts=None):
         cy, cx = self.coord(y, x, shifts)
-        cy, cx = cy[None,:], cx[None,:]
-        ky, kx = self.ky[:, None], self.kx[:, None]
-        xarg = ne.evaluate('cos(kx * cx)')
-        yarg = ne.evaluate('cos(ky * cy)')
-        return self.coef.T.dot(yarg).T.dot(xarg)
+        return chebval2d(cy, cx, self.coef)
 
     @property
     def residual(self):
@@ -115,47 +109,42 @@ class SuperRegistration(object):
 
         return (self.model - self.images).ravel()
 
-    #def gradshifts(self, shifts=None):
-    #    shifts = shifts if shifts is not None else self.shifts
+    def gradshifts(self, shifts=None, h=1E-6):
+        if shifts is not None:
+            self.shifts = shifts
 
-    #    args = self.coord(shifts[:,None] * self.k[None,:])
-    #    sinkd = ne.evaluate('sin(args)')
-    #    coskd = ne.evaluate('cos(args)')
-
-    #    cn = self.An*self.k
-    #    cm = self.Bn*self.k
-
-    #    dIds_n = (cn*coskd).dot(self.coskx) - (cn*sinkd).dot(self.sinkx)
-    #    dIds_m = (cm*sinkd).dot(self.coskx) + (cm*coskd).dot(self.sinkx)
-
-    #    return (dIds_n - dIds_m) / np.diff(self.domain)
-    def gradshifts(self, shifts=None):
-        shifts = shifts if shifts is not None else self.shifts
-
-
+        jac = np.zeros((self.N * np.prod(self.shape), self.shifts.size))
+        p0 = self.params
+        for i in range(self.shifts.size):
+            p0[i] += h
+            r0 = self.res(params=p0)
+            p0[i] -= 2 * h
+            r1 = self.res(params=p0)
+            p0[i] += h
+            jac[:,i] = (r0 - r1)/(2 * h)
+        return jac
 
     def gradcoef(self):
-        allcoords = np.hstack([self.x] + [self.x + s for s in self.shifts])
-        allargs = self.k[:,None] * self.coord(allcoords)[None,:]
+        M = np.prod(self.shape)
+        jac = np.zeros((self.N * M, (self.deg+1)**2))
+        eye = np.identity(self.deg+1)
+        for i in range(self.deg+1):
+            for j in range(self.deg+1):
+                for k, (sy, sx) in enumerate(self.shiftiter):
+                    cy, cx = self.coord(self.y + sy, self.x + sx)
+                    sl = np.s_[k * M:(k + 1) * M, j + i * (self.deg+1)]
+                    jac[sl] = (chebval(cy, eye[i])[:,None] *
+                               chebval(cx, eye[j])[None,:]).ravel()
+        return np.array(jac)
 
-        sinkx = ne.evaluate('sin(allargs)')
-        coskx = ne.evaluate('cos(allargs)')
-        return np.vstack([sinkx, coskx])
-
-    def grad(self, params=None):
+    def grad(self, params=None, h=1E-6):
         if params is not None:
             self.set_params(params)
-        else:
-            params = self.params
 
+        gshifts = self.gradshifts(h=h)
         gcoef = self.gradcoef()
-        gshifts = self.gradshifts(self.shifts)
 
-        gradshifts = np.zeros((self.N-1, self.L*self.N))
-        for i in range(self.N-1):
-            gradshifts[i, (i+1)*self.L:(i+2)*self.L] = gshifts[i]
-
-        return np.vstack([gradshifts, gcoef]).T
+        return np.concatenate((gshifts, gcoef), axis=1)
 
     def jac(self, p=None, h=1e-6):
         if p is not None:
@@ -192,11 +181,9 @@ class SuperRegistration(object):
         p0 = p0 if p0 is not None else self.params
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            #lm = LM(self.res, self.grad)
-            lm = LM(self.res, self.jac)
+            lm = LM(self.res, self.grad)
             self.sol = lm.leastsq(p0, **kwargs)
-        #j = self.grad()
-        j = self.jac()
+        j = self.grad()
         jtj = j.T.dot(j)
         sigma = self.estimatenoise()
         shifts = self.shifts
@@ -204,16 +191,29 @@ class SuperRegistration(object):
 
         return shifts, sigma/np.sqrt(jtjshifts)
 
+    def evidence(self, sigma=None):
+        s = sigma or self.estimatenoise()
+        r = self.res()
+        N = len(self.params)
+        J = self.grad()
+        logdet = slogdet(J.T.dot(J))[1]
+        return (-r.dot(r)/s**2 + N*np.log(2*np.pi*s**2) - logdet)/2.
+
 
 if __name__=="__main__":
     
+    from scipy.misc import face
+    import super_reg.twod.fourierseries as fs
+    import matplotlib.pyplot as plt
+
     deg = 8
-    datamaker = SuperRegistration(np.zeros((2,32,32)), deg=deg)
-    images = datamaker.model
-    shifts = datamaker.shifts.copy()
-    images /= images.std()
-    data = images + 0.05 * np.random.randn(*images.shape)
+    L = 32
+    datamaker0 = fs.SuperRegistration(np.zeros((2, L, L)), deg=deg)
+    datamaker0.shifts = np.array([3*np.random.randn(2)])
+    shifts = datamaker0.shifts
+    fdata = datamaker0.model
+    fdata /= fdata.std()
 
-    reg = SuperRegistration(data, deg)
-    s1, s1_sigma = reg.fit(iprint=2,)
+    data = fdata + 0.05 * np.random.randn(*fdata.shape)
 
+    reg = SuperRegistration(data, 16)

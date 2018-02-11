@@ -9,10 +9,7 @@ memory and keeps track of wisdom so that continued use of highler
 optimized ffts is only expensive once
 """
 
-try:
-    import cPickle as pickle
-except ImportError as e:
-    import pickle
+import pickle
 import pyfftw
 import os
 
