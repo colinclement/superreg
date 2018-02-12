@@ -68,7 +68,7 @@ def powerlaw(size, p, scale=None, rng=np.random):
     x, y = np.arange(lx//2+1), np.fft.fftshift(np.arange(ly)-ly/2)
     xg, yg = np.meshgrid(x, y)
     k = np.hypot(xg, yg)
-    img = np.fft.irfftn(kk*np.exp(-k/scale)/(1+k)**p)
+    img = np.fft.irfftn(kk*np.exp(-(k/scale)**2/2.)/(1+k)**p)
     return img / img.ptp()
 
 def fakedata(noise, shifts=[np.zeros(2)], L=64, sliceobj=None,
