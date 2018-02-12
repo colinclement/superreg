@@ -53,7 +53,8 @@ class Register(object):
         self.masktype = kwargs.get("masktype", "linear")
         self._maskdict = {'linear': self._linear_interp_mask,
                           'constant': self._constant_region_mask,
-                          'sigmoid': self._sigmoid_mask}
+                          'sigmoid': self._sigmoid_mask,
+                          'none': self._nomask}
         self.mask_kwargs = kwargs.get('mask_kwargs', [{}, {}])
 
         self.Ly, self.Lx = self.imag0.shape
@@ -143,6 +144,9 @@ class Register(object):
         mask = np.zeros_like(x)
         mask[o:o+l] = 1.
         return mask
+
+    def _nomask(self, x, d, **kwargs):
+        return np.ones_like(x)
     
     def getmask(self, delta, **kwargs):
         mask = self._maskdict[self.masktype]
