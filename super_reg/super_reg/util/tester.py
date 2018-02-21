@@ -22,7 +22,11 @@ class BiasTest(object):
         self.data = md.fakedata(0., **data_kwargs)
 
     def getdata(self, noise):
-        return self.data + noise * np.random.randn(*self.data.shape)
+        noisegen = self.data_kwargs.get('noisegen', np.random.randn)
+        args0 = self.data.shape
+        if 'noiseargs' in self.data_kwargs:
+            args0 = args0 + self.data_kwargs['noiseargs']
+        return self.data + noise * noisegen(*args0)
 
     def repeat(self, noise, **kwargs):
         p1s, p1_sigmas = [], []
