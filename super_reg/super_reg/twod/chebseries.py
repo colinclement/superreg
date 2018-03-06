@@ -101,7 +101,9 @@ class SuperRegistration(object):
 
     @property
     def residual_k(self):
-        return np.abs(np.fft.fftn(self.residual, axes=(1,2)))**2
+        rk = np.abs(np.fft.fftn(self.residual, axes=(1,2)))**2
+        rk[:,0,0] = 0.  # hiding sum
+        return np.fft.fftshift(rk, axes=(1,2))
 
     def res(self, params=None):
         params = params if params is not None else self.params
