@@ -36,6 +36,7 @@ class FFT(object):
         """
         self.real = real
         self.shape = shape
+        self.n = shape[0]*shape[1]
         self.realshape = (shape[0], shape[1]//2+1)
         self.fftwkwargs = {"threads": kwargs.get("threads", 2),
                            "flags": [kwargs.get("plan", "FFTW_MEASURE")], 
