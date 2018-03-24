@@ -69,10 +69,10 @@ class BiasTest(object):
         xlabel = xlabel if xlabel is not None else "Noise level $\sigma$"
 
         axs.errorbar(abscissa, biases,
-                     yerr = biases_std, label=r"$\Delta$ Bias",
+                     yerr = biases_std, label=r"$\Delta_y$ Bias",
                      linestyle="-", marker="o")
-        axs.plot(abscissa, err, ':o', label=r"CRB of $\Delta$")
-        axs.plot(abscissa, bias_std, label=r"Expected Error")
+        axs.plot(abscissa, err, ':o', label=r"CRB of $\Delta_y$")
+        axs.plot(abscissa, bias_std, ls='none', marker='D', label=r"Expected Error")
 
         axs.set_xlabel(xlabel)
         axs.set_ylabel(r"$\langle\Delta\rangle - \Delta_\mathrm{true}$")
