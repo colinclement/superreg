@@ -8,16 +8,11 @@ from matplotlib.pyplot import *
 from scipy.ndimage import gaussian_filter
 
 from super_reg.util.leastsq import LM
+import super_reg.util.makedata as md
 
 DEGREE = 20
 
 rng = np.random.RandomState(14850)
-
-#TODO: 
-#   1. Test for biases with finite difference derivative
-#   2. Implement correct gradient for coefficients
-#   3. Make and test fake data that isn't perfectly representable
-#   4. Investigate model complexity
 
 
 class SuperRegistration(object):
@@ -32,8 +27,8 @@ class SuperRegistration(object):
             Maximum degree of fourier mode
 
         shifts : ndarray [N - 1, 2]
-            List of 2D coordinates for the first image in the sequence.
-            It will be used for the basis of all other coordinates for the other images
+            List of 2D coordinates for the first image in the sequence.  It will
+            be used for the basis of all other coordinates for the other images
 
         domain : ndarray [2, 2]
             [[ymin, ymax], [xmin, xmax]]
@@ -45,36 +40,41 @@ class SuperRegistration(object):
         self.N = len(self.images)
         self.shape = self.images[0].shape
 
+        self.coef = np.zeros((self.shape[0], self.shape[1]//2+1),
+                             dtype='complex128')
+
+        self.ky = np.fft.fftfreq(self.shape[0], d=1./(2*np.pi))[:,None]
+        self.kx = np.fft.rfftfreq(self.shape[1], d=1./(2*np.pi))
+
+        p0 = np.random.randn(2*(self.N-1) + 2*(deg+1)*(2*deg+1)-1)
+        # -1 is to remove imaginary part of zero mode
+
+        self.set_params(p0)
+        
         if self.shifts is None:
             self.shifts = rng.rand(self.N-1, 2)
 
-        self.coef = np.random.randn(deg+1, deg+1)
-
-        self.x = 1. * np.arange(self.shape[1])
-        self.y = 1. * np.arange(self.shape[0])
-
-        self.ky = 2 * np.pi * np.arange(self.deg+1)
-        self.kx = 2 * np.pi * np.arange(self.deg+1)
-
-    def domain(self, shifts=None):
-        """   Smallest rectangle containing all shifted images  """
-        shifts = shifts if shifts is not None else self.shifts
-        ymin, xmin = np.min(shifts, 0)
-        ymax, xmax = np.max(shifts, 0)
-        ymin = min(ymin, 0)
-        xmin = min(xmin, 0)
-        ymax = max(ymax + self.shape[0], self.shape[0]) 
-        xmax = max(xmax + self.shape[1], self.shape[1]) 
-        return np.array([[ymin, ymax], [xmin, xmax]])
+    def phase(self, shift):
+        return np.exp(-1j*shift[0]*self.ky)*np.exp(-1j*shift[1]*self.kx)
 
     def set_params(self, params):
-        M = 2 * (self.N - 1)
+        M, deg = 2 * (self.N - 1), self.deg
         self.shifts = params[:M].reshape(self.N-1, 2)
-        self.coef = params[M:].reshape(* (2 * (self.deg + 1,)))
+        coefs = params[M:]
+        nc = len(coefs)+1  # remove imag zero mode because img is real
+        sh = (2*deg+1, deg+1)
+        rc, ic = coefs[:nc//2].reshape(sh), coefs[nc//2:]
+        ic = np.concatenate((np.array([0.]), ic)).reshape(sh)
+        self.coef[:deg+1,:deg+1] = rc[:deg+1] + 1j*ic[:deg+1]
+        self.coef[-deg:,:deg+1] = rc[-deg:] + 1j*ic[-deg:]
 
     @property
     def params(self):
-        return np.concatenate((self.shifts.ravel(), self.coef.ravel()))
+        deg = self.deg
+        plus, minus = self.coef[:deg+1,:deg+1], self.coef[-deg:,:deg+1]
+        coef = np.concatenate((plus, minus), axis=0)
+        return np.concatenate((self.shifts.ravel(), coef.real.ravel(),
+                               coef.imag.ravel()[1:]))  #remove imag zero
 
     @property
     def shiftiter(self):
@@ -82,24 +82,8 @@ class SuperRegistration(object):
 
     @property
     def model(self):
-        y, x = self.y, self.x
-        return np.array([self(y + sy, x + sx) for (sy, sx) in self.shiftiter])
-
-    def coord(self, y, x, shifts=None):
-        """ 
-        Note that we use a quarter of domain as we impose mirror symmetry
-        """
-        dy, dx = self.domain(shifts)
-        return ((y - dy[0]) / (2. * (dy[1] - dy[0])),
-                (x - dx[0]) / (2. * (dx[1] - dx[0])))
-
-    def __call__(self, y, x, shifts=None):
-        cy, cx = self.coord(y, x, shifts)
-        cy, cx = cy[None,:], cx[None,:]
-        ky, kx = self.ky[:, None], self.kx[:, None]
-        xarg = ne.evaluate('cos(kx * cx)')
-        yarg = ne.evaluate('cos(ky * cy)')
-        return self.coef.T.dot(yarg).T.dot(xarg)
+        return np.array([np.fft.irfftn(self.phase(d)*self.coef, norm='ortho')
+                         for d in self.shiftiter])
 
     @property
     def residual(self):
@@ -115,49 +99,7 @@ class SuperRegistration(object):
 
         return (self.model - self.images).ravel()
 
-    #def gradshifts(self, shifts=None):
-    #    shifts = shifts if shifts is not None else self.shifts
-
-    #    args = self.coord(shifts[:,None] * self.k[None,:])
-    #    sinkd = ne.evaluate('sin(args)')
-    #    coskd = ne.evaluate('cos(args)')
-
-    #    cn = self.An*self.k
-    #    cm = self.Bn*self.k
-
-    #    dIds_n = (cn*coskd).dot(self.coskx) - (cn*sinkd).dot(self.sinkx)
-    #    dIds_m = (cm*sinkd).dot(self.coskx) + (cm*coskd).dot(self.sinkx)
-
-    #    return (dIds_n - dIds_m) / np.diff(self.domain)
-    def gradshifts(self, shifts=None):
-        shifts = shifts if shifts is not None else self.shifts
-
-
-
-    def gradcoef(self):
-        allcoords = np.hstack([self.x] + [self.x + s for s in self.shifts])
-        allargs = self.k[:,None] * self.coord(allcoords)[None,:]
-
-        sinkx = ne.evaluate('sin(allargs)')
-        coskx = ne.evaluate('cos(allargs)')
-        return np.vstack([sinkx, coskx])
-
-    def grad(self, params=None):
-        if params is not None:
-            self.set_params(params)
-        else:
-            params = self.params
-
-        gcoef = self.gradcoef()
-        gshifts = self.gradshifts(self.shifts)
-
-        gradshifts = np.zeros((self.N-1, self.L*self.N))
-        for i in range(self.N-1):
-            gradshifts[i, (i+1)*self.L:(i+2)*self.L] = gshifts[i]
-
-        return np.vstack([gradshifts, gcoef]).T
-
-    def jac(self, p=None, h=1e-6):
+    def jac(self, p=None, h=1e-7):
         if p is not None:
             self.set_params(p)
         else:
@@ -207,11 +149,13 @@ class SuperRegistration(object):
 
 if __name__=="__main__":
     
-    deg = 8
-    datamaker = SuperRegistration(np.zeros((2,32,32)), deg=deg)
-    images = datamaker.model
-    shifts = datamaker.shifts.copy()
-    images /= images.std()
+    L = 64
+    deg = 13
+    img = md.powerlaw((L, L), 1.8, scale=L/6., rng=rng)
+    shifts = np.random.randn(2)
+    images = md.fakedata(0., [-shifts], L, img=img, offset=np.zeros(2),
+                         mirror=False)
+
     data = images + 0.05 * np.random.randn(*images.shape)
 
     reg = SuperRegistration(data, deg)
