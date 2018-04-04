@@ -4,8 +4,8 @@ import numexpr as ne
 from itertools import chain
 
 from scipy.optimize import golden, leastsq
-#from matplotlib.pyplot import *
 from scipy.ndimage import gaussian_filter
+from numpy.linalg import slogdet
 
 from super_reg.util.leastsq import LM
 import super_reg.util.makedata as md
@@ -50,9 +50,9 @@ class SuperRegistration(object):
         self.ky = np.fft.fftfreq(self.shape[0], d=1./(2*np.pi))[:,None]
         self.kx = np.fft.rfftfreq(self.shape[1], d=1./(2*np.pi))[None,:]
 
-        p0 = np.random.randn(2*(self.N-1) + 2*(deg+1)*(2*deg+1)-1)
+        self.p0 = np.random.randn(2*(self.N-1) + 2*(deg+1)*(2*deg+1)-1)
         # -1 is to remove imaginary part of zero mode
-        self.set_params(p0)
+        self.set_params(self.p0)
         
     def phase(self, shift):
         return np.exp(-1j*shift[0]*self.ky)*np.exp(-1j*shift[1]*self.kx)
@@ -68,22 +68,24 @@ class SuperRegistration(object):
         self.coef[:deg+1,:deg+1] = rc[:deg+1] + 1j*ic[:deg+1]
         self.coef[-deg:,:deg+1] = rc[-deg:] + 1j*ic[-deg:]
 
-    def cutout(self, arr, zero=True):
+    def slice(self, arr):
         deg = self.deg
-        plus, minus = arr[:deg+1,:deg+1], arr[-deg:,:deg+1]
-        cut = np.concatenate((plus, minus), axis=0)
+        return np.concatenate((arr[:deg+1,:deg+1], arr[-deg:,:deg+1]), axis=0)
+
+    def comp(self, arr, zero=False):
         if zero:
-            return np.concatenate((cut.real.ravel(), cut.imag.ravel()))
+            return np.concatenate((arr.real.ravel(), arr.imag.ravel()))
         else:
-            return np.concatenate((cut.real.ravel(), cut.imag.ravel()[1:]))
+            return np.concatenate((arr.real.ravel(), arr.imag.ravel()[1:]))
+
+    def cutout(self, arr, zero=False):
+        cut = self.slice(arr)
+        return self.comp(cut, zero)
 
     @property
     def params(self):
-        deg = self.deg
-        plus, minus = self.coef[:deg+1,:deg+1], self.coef[-deg:,:deg+1]
-        coef = np.concatenate((plus, minus), axis=0)
-        return np.concatenate((self.shifts.ravel(), coef.real.ravel(),
-                               coef.imag.ravel()[1:]))  #remove imag zero
+        return np.concatenate((self.shifts.ravel(),
+                               self.comp(self.slice(self.coef), zero=False)))
 
     @property
     def shiftiter(self):
@@ -107,8 +109,9 @@ class SuperRegistration(object):
         params = params if params is not None else self.params
         self.set_params(params)
 
+        c = self.slice(self.coef)
         return np.array([
-                self.cutout(dk - self.phase(d)*self.coef, False)
+                self.comp(self.slice(dk) - self.slice(self.phase(d))*c)
                 for dk, d in zip(self.images_k, self.shiftiter)
             ]).ravel()
 
@@ -187,12 +190,21 @@ class SuperRegistration(object):
 
         return shifts, sigma/np.sqrt(jtjshifts)
 
+    def evidence(self, sigma=None):
+        s = sigma or self.estimatenoise()
+        r = self.residual.ravel()
+        N = len(self.params)
+        J = self.jac()
+        logdet = slogdet(J.T.dot(J))[1]
+        return (-r.dot(r)/s**2 + N*np.log(2*np.pi*s**2) - logdet)/2.
+
+
 
 if __name__=="__main__":
     
     import matplotlib.pyplot as plt
-    L = 64 
-    deg = 12 
+    L = 128
+    deg = 17 
     img = md.powerlaw((L, L), 1.8, scale=L/6., rng=rng)
     shifts = np.random.randn(2)
     images = md.fakedata(0., [-shifts], L, img=img, offset=np.zeros(2),
@@ -202,3 +214,16 @@ if __name__=="__main__":
 
     reg = SuperRegistration(data, deg)
     s1, s1_sigma = reg.fit(iprint=2,)
+
+    #evd = []
+    #orders = range(6, 26)
+    #results = []
+    #
+    ## deg = 10 was peak for img scale 1.8, L=64 and scale=L/6.
+    ## deg = 17 was peak for img scale 1.8, L=128 and scale=L/6.
+    #for deg in orders:
+    #    reg = SuperRegistration(data, deg)
+    #    reg.fit()
+    #    results.append(reg.shifts.copy().squeeze())
+    #    evd.append(reg.evidence(0.05))
+    #    print("Fit deg={} with evidence={:.1f}".format(deg, evd[-1]))
