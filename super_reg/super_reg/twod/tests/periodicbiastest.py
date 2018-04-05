@@ -44,7 +44,7 @@ def loadresults(directory):
             mask_kwargs = pickle.load(infile)
             alldata = pickle.load(infile)
             shifts = pickle.load(infile)
-            img = pickle.load(img)
+            img = pickle.load(infile)
         data[f] = {'results': res, 'noises': noises,
                    'datakwargs': datakwargs, 'mask_kwargs': mask_kwargs,
                    'alldata': alldata, 'shifts': shifts, 'img': img}
@@ -65,8 +65,8 @@ if __name__=="__main__":
     abscissa = np.linspace(0., 2., 50)
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
-    noises = np.linspace(0, 0.1, 20)
-    N = 20
+    noises = np.linspace(0, 0.1, 3)
+    N = 2
 
     directory = 'results/N_{}-'.format(N)+today
 
@@ -87,7 +87,7 @@ if __name__=="__main__":
     biastest = BiasTest(datakwargs[data], N=N, registration=Register,
                         noises = noises)
     alldata = biastest.noiseloop(delta0=delta+0.01*np.random.randn(2),)
-    print("Finished noise loop")
+    print("Finished noise loop in {}".format(datetime.now()-start))
     #alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
     #print("Finished shift loop")
     
@@ -96,8 +96,8 @@ if __name__=="__main__":
                            registration=SuperRegistration,
                            noises=noises, deg=17)
     # Note deg=17 was tested by maximizing evidence in fourierseries.py
-    alldata_sr = biastest_sr.noiseloop()
-    print("Finished noise loop")
+    alldata_sr = biastest_sr.noiseloop(iprint=2).squeeze()
+    print("Finished noise loop in {}".format(datetime.now()-start))
     #alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
     #print("Finished shift loop")
  
@@ -138,8 +138,7 @@ if __name__=="__main__":
     filename_superreg = os.path.join(
         directory, "periodic-superreg-data-{}_mask-{}.pkl".format(data,mask)
     )
-    #saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
-    #            alldata, shifts, img)
-    #saveresults(filename_superreg, results_deltay, noises, datakwargs, mask_kwargs,
-    #            alldata_delta, shifts, img)
-    print("finished {}, {} in {}".format(data, mask, datetime.now()-start))
+    saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
+                alldata, shifts, img)
+    saveresults(filename_superreg, results_superreg, noises, datakwargs, 
+                mask_kwargs, alldata_sr, shifts, img)
