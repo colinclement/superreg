@@ -66,7 +66,7 @@ if __name__=="__main__":
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
     noises = np.linspace(0, 0.1, 3)
-    N = 2
+    N = 20
 
     directory = 'results/N_{}-'.format(N)+today
 
@@ -88,19 +88,16 @@ if __name__=="__main__":
                         noises = noises)
     alldata = biastest.noiseloop(delta0=delta+0.01*np.random.randn(2),)
     print("Finished noise loop in {}".format(datetime.now()-start))
-    #alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
-    #print("Finished shift loop")
     
     start = datetime.now()
     biastest_sr = BiasTest(datakwargs[data], N=N,
                            registration=SuperRegistration,
                            noises=noises, deg=17)
+    p0 = biastest_sr.reg.p0.copy()
+    p0 /= np.sqrt(len(p0))
     # Note deg=17 was tested by maximizing evidence in fourierseries.py
-    alldata_sr = biastest_sr.noiseloop(iprint=2).squeeze()
+    alldata_sr = biastest_sr.noiseloop(p0=p0).squeeze()
     print("Finished noise loop in {}".format(datetime.now()-start))
-    #alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
-    #print("Finished shift loop")
- 
 
     results_y = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
     results_x = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
@@ -118,7 +115,8 @@ if __name__=="__main__":
     results_superreg = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
     for dds in alldata_sr:
         p1s, p1_sigmas = dds
-        results_superreg['bias'] += [np.mean(p1s[:,1])-delta[1]]
+        results_superreg['bias'] += [-np.mean(p1s[:,1])-delta[1]]
+        # Convention in superreg changes sign of answer
         results_superreg['bias_std'] += [np.std(p1s[:,1])]
         results_superreg['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
         results_superreg['err'] += [np.mean(p1_sigmas[:,1])]
