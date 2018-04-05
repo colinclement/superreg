@@ -17,6 +17,7 @@ from datetime import datetime
 from super_reg.util.tester import BiasTest
 import super_reg.util.makedata as md
 from super_reg.twod.periodicshift import Register
+from super_reg.twod.fourierseries import SuperRegistration
 
 rng = np.random.RandomState(148509289)
                                                                       
@@ -65,13 +66,13 @@ if __name__=="__main__":
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
     noises = np.linspace(0, 0.1, 20)
-    N = 1000
+    N = 20
 
     directory = 'results/N_{}-'.format(N)+today
 
     datakwargs = {
         'random': {'L': L, 'offset': np.zeros(2), 'shifts': [delta],
-                   'img': md.powerlaw((L, L), 1.8, scale=L/4., rng=rng),
+                   'img': md.powerlaw((L, L), 1.8, scale=L/6., rng=rng),
                    'mirror': False}
         }
     mask_kwargs = {'none': [{}, {}]}
@@ -87,12 +88,23 @@ if __name__=="__main__":
                         noises = noises)
     alldata = biastest.noiseloop(delta0=delta+0.01*np.random.randn(2),)
     print("Finished noise loop")
-    alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
-    print("Finished shift loop")
+    #alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
+    #print("Finished shift loop")
     
+    start = datetime.now()
+    biastest_sr = BiasTest(datakwargs[data], N=N,
+                           registration=SuperRegistration,
+                           noises=noises, deg=17)
+    # Note deg=17 was tested by maximizing evidence in fourierseries.py
+    alldata_sr = biastest_sr.noiseloop()
+    print("Finished noise loop")
+    #alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
+    #print("Finished shift loop")
+ 
+
     results_y = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
     results_x = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
-    for dd, dds in zip(alldata, alldata_delta):
+    for dd in alldata:
         p1s, p1_sigmas = dd
         results_y['bias'] += [np.mean(p1s[:,0])-delta[0]]
         results_y['bias_std'] += [np.std(p1s[:,0])]
@@ -103,34 +115,31 @@ if __name__=="__main__":
         results_x['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
         results_x['err'] += [np.mean(p1_sigmas[:,1])]
         
-    results_deltay = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
-    for dds, d in zip(alldata_delta, shifts.squeeze()):
+    results_superreg = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
+    for dds in alldata_sr:
         p1s, p1_sigmas = dds
-        results_deltay['bias'] += [np.mean(p1s[:,1])-d[1]]
-        results_deltay['bias_std'] += [np.std(p1s[:,1])]
-        results_deltay['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
-        results_deltay['err'] += [np.mean(p1_sigmas[:,1])]
+        results_superreg['bias'] += [np.mean(p1s[:,1])-delta[1]]
+        results_superreg['bias_std'] += [np.std(p1s[:,1])]
+        results_superreg['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
+        results_superreg['err'] += [np.mean(p1_sigmas[:,1])]
 
     img = datakwargs[data]['img']
     axes[0].matshow(img, cmap='Greys')
     axes[0].axis('off')
     f, a = biastest.plotbias(results_x, axis=axes[1],
-                           title="{} data with {} mask".format(data,mask))
-    f, a = biastest.plotbias(results_deltay, abscissa=abscissa, xlabel=xlabel, 
-                             axis=axes[2], title="Shift Dependent Bias")
+                             title="{} data with {} mask".format(data,mask))
+    f, a = biastest.plotbias(results_superreg,
+                             axis=axes[2], title="Super Registration")
 
     f.savefig(os.path.join(directory,"summary.pdf".format(data,mask)))
-    filename = os.path.join(directory,"periodic-data-{}_mask-{}.pkl".format(data,mask))
-    filename_deltas = os.path.join(directory,
-                                   "periodic-shift-data-{}_mask-{}.pkl".format(data,mask))
-    saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
-                alldata, shifts, img)
-    saveresults(filename_deltas, results_deltay, noises, datakwargs, mask_kwargs,
-                alldata_delta, shifts, img)
-    #with open(filename, 'wb') as outfile:
-    #    pickle.dump(results_y, outfile)
-    #    pickle.dump(biastest.noises, outfile)
-    #    pickle.dump(datakwargs[data], outfile)
-    #    pickle.dump(mask_kwargs[mask], outfile)
-    #    pickle.dump(alldata, outfile)
+    filename = os.path.join(
+        directory,"periodic-data-{}_mask-{}.pkl".format(data,mask)
+    )
+    filename_superreg = os.path.join(
+        directory, "periodic-superreg-data-{}_mask-{}.pkl".format(data,mask)
+    )
+    #saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
+    #            alldata, shifts, img)
+    #saveresults(filename_superreg, results_deltay, noises, datakwargs, mask_kwargs,
+    #            alldata_delta, shifts, img)
     print("finished {}, {} in {}".format(data, mask, datetime.now()-start))
