@@ -40,6 +40,8 @@ class BiasTest(object):
         alldata = []
         shifts = self.data_kwargs['shifts']
         for n in self.noises:
+            if 'sigma' in kwargs:
+                kwargs['sigma'] = n
             p1s, p1_sigmas = self.repeat(n, **kwargs)
             alldata += [[p1s, p1_sigmas]]
         return np.array(alldata)
