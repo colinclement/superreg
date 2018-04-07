@@ -14,6 +14,8 @@ DEGREE = 20
 
 rng = np.random.RandomState(14850)
 
+# TODO: Pass correct noise into fit while testing so CRB curve goes to zero
+
 
 class SuperRegistration(object):
     def __init__(self, images, deg, shifts=None, domain=None):
@@ -174,7 +176,7 @@ class SuperRegistration(object):
         r = self.residual.ravel()
         return np.sqrt(r.dot(r)/len(r))
 
-    def fit(self, images=None, p0=None, **kwargs):
+    def fit(self, images=None, p0=None, sigma=None, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
             self.images_k = np.fft.rfftn(images, axes=(1,2), norm='ortho')
@@ -185,7 +187,7 @@ class SuperRegistration(object):
             self.sol = lm.leastsq(p0, **kwargs)
         j = self.jac()
         jtj = j.T.dot(j)
-        sigma = self.estimatenoise()
+        sigma = self.estimatenoise() if sigma is None else sigma
         shifts = self.shifts
         jtjshifts = jtj.diagonal()[:shifts.size].reshape(*shifts.shape)
 
@@ -205,23 +207,23 @@ if __name__=="__main__":
     
     import matplotlib.pyplot as plt
     L = 128
-    deg = 17 
+    deg = 17
     img = md.powerlaw((L, L), 1.8, scale=L/6., rng=rng)
     shifts = np.random.randn(2)
     images = md.fakedata(0., [-shifts], L, img=img, offset=np.zeros(2),
                          mirror=False)
 
-    data = images + 0.05 * np.random.randn(*images.shape)
+    data = images + 0.0 * np.random.randn(*images.shape)
 
     reg = SuperRegistration(data, deg)
     s1, s1_sigma = reg.fit(iprint=2,)
 
-    #evd = []
-    #orders = range(6, 26)
-    #results = []
-    #
-    ## deg = 10 was peak for img scale 1.8, L=64 and scale=L/6.
-    ## deg = 17 was peak for img scale 1.8, L=128 and scale=L/6.
+    evd = []
+    orders = range(6, 23)
+    results = []
+    
+    # deg = 10 was peak for img scale 1.8, L=64 and scale=L/6.
+    # deg = 17 was peak for img scale 1.8, L=128 and scale=L/6.
     #for deg in orders:
     #    reg = SuperRegistration(data, deg)
     #    reg.fit()
