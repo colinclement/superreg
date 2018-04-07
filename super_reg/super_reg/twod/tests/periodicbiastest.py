@@ -65,8 +65,8 @@ if __name__=="__main__":
     abscissa = np.linspace(0., 2., 50)
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
-    noises = np.linspace(0, 0.1, 3)
-    N = 20
+    noises = np.linspace(0, 0.1, 20)
+    N = 500
 
     directory = 'results/N_{}-'.format(N)+today
 
@@ -92,10 +92,10 @@ if __name__=="__main__":
     start = datetime.now()
     biastest_sr = BiasTest(datakwargs[data], N=N,
                            registration=SuperRegistration,
-                           noises=noises, deg=17)
+                           noises=noises, deg=20)  # low noise need more deg 
+    # Note deg=17 was tested by maximizing evidence in fourierseries.py
     p0 = biastest_sr.reg.p0.copy()
     p0 /= np.sqrt(len(p0))
-    # Note deg=17 was tested by maximizing evidence in fourierseries.py
     alldata_sr = biastest_sr.noiseloop(p0=p0).squeeze()
     print("Finished noise loop in {}".format(datetime.now()-start))
 
