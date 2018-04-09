@@ -36,7 +36,8 @@ class SuperRegistration(object):
             [[ymin, ymax], [xmin, xmax]]
 
         """
-        self.deg = deg
+        Ly, Lx = images[0].shape
+        self.deg = min(deg, Ly//2, Lx//2)
         self.images = images
         self.images_k = np.fft.rfftn(images, axes=(1,2), norm='ortho')
 
@@ -176,7 +177,7 @@ class SuperRegistration(object):
         r = self.residual.ravel()
         return np.sqrt(r.dot(r)/len(r))
 
-    def fit(self, images=None, p0=None, sigma=None, **kwargs):
+    def lmfit(self, images=None, p0=None, sigma=None, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
             self.images_k = np.fft.rfftn(images, axes=(1,2), norm='ortho')
@@ -193,6 +194,67 @@ class SuperRegistration(object):
 
         return shifts, sigma/np.sqrt(jtjshifts)
 
+    def averagecoefs(self):
+        """
+        Estimate of the best coefficients is the average of all the inverse
+        shifted data
+        """
+        return np.array([
+            self.comp(self.slice(dk) * self.slice(self.phase(-d)))
+            for dk, d in zip(self.images_k, self.shiftiter)
+        ]).mean(0)
+
+    def shiftres(self, shifts=None):
+        if shifts is not None:
+            self.shifts = shifts.reshape(*self.shifts.shape)
+        return self.res()
+
+    def shiftgrad(self, shifts=None):
+        if shifts is not None:
+            self.shifts = shifts.reshape(*self.shifts.shape)
+        return self.gradshifts()
+
+    def minshift(self, shifts0=None, **kwargs):
+        shifts0 = shifts0 if shifts0 is not None else self.shifts.ravel()
+        lm = LM(self.shiftres, self.shiftgrad)
+        self.shiftsol = lm.leastsq(shifts0, **kwargs)
+        return self.shiftsol[0]
+
+    def fit(self, images=None, p0=None, sigma=None, relchange=1E-6, itnlim=200,
+             **kwargs):
+        if images is not None:  # reset images and parameters
+            self.images = images
+            self.images_k = np.fft.rfftn(images, axes=(1,2), norm='ortho')
+        if p0 is not None:
+            self.set_params(p0)
+        else:
+            p0 = self.params
+        iprint = kwargs.get('iprint', 0)
+
+        r = self.res()
+        c0 = r.T.dot(r)/2.
+        for i in range(itnlim):
+            c = self.averagecoefs() 
+            self.set_params(np.concatenate((self.shifts.ravel(), c)))
+            s = self.minshift(**kwargs)
+
+            r = self.res()
+            c1 = r.T.dot(r)/2.
+            if np.abs((c1 - c0)/c0) < relchange:
+                break
+            if iprint:
+                print("Outer Itn {} nlnprob = {}".format(i, c1))
+            c0 = c1
+        if iprint and i < itnlim - 1:
+            print("Converged!")
+        elif:
+            print("Maximum number of iterations achieved")
+        j = self.gradshifts()
+        jtj = j.T.dot(j).diagonal()
+        sigma = self.estimatenoise() if sigma is None else sigma
+        var = sigma/np.sqrt(jtj)
+        return self.shifts, var.reshape(*self.shifts.shape)
+
     def evidence(self, sigma=None):
         s = sigma or self.estimatenoise()
         r = self.residual.ravel()
@@ -205,28 +267,41 @@ class SuperRegistration(object):
 
 if __name__=="__main__":
     
+    def crb(img, deg=None):
+        Ly, Lx = img.shape
+        degy = deg if deg is not None else Ly
+        degx = deg if deg is not None else Lx
+        ky = np.fft.fftfreq(Ly, d=1./(2*np.pi))
+        ky[degy:] = 0.
+        kx = np.fft.fftfreq(Lx, d=1./(2*np.pi))
+        kx[degx:] = 0.
+        Ik = np.fft.fftn(img, norm='ortho')
+        Ik2 = Ik*Ik.conj()
+        return np.sum(ky**2*Ik2).real, np.sum(kx**2*Ik2).real
+    
     import matplotlib.pyplot as plt
-    L = 128
-    deg = 17
+    L = 64
+    deg = 30 
+    sigma = 0.03
     img = md.powerlaw((L, L), 1.8, scale=L/6., rng=rng)
     shifts = np.random.randn(2)
     images = md.fakedata(0., [-shifts], L, img=img, offset=np.zeros(2),
                          mirror=False)
 
-    data = images + 0.0 * np.random.randn(*images.shape)
+    data = images + sigma * np.random.randn(*images.shape)
 
     reg = SuperRegistration(data, deg)
-    s1, s1_sigma = reg.fit(iprint=2,)
+    s1, s1_sigma = reg.fit(iprint=1, sigma=sigma)
+    s1_crb = sigma/np.sqrt(crb(img))
 
     evd = []
-    orders = range(6, 23)
+    orders = range(6, 25)
     results = []
     
-    # deg = 10 was peak for img scale 1.8, L=64 and scale=L/6.
-    # deg = 17 was peak for img scale 1.8, L=128 and scale=L/6.
+    # deg = 19 was peak for img scale 1.8, L=128 and scale=L/6.
     #for deg in orders:
     #    reg = SuperRegistration(data, deg)
     #    reg.fit()
     #    results.append(reg.shifts.copy().squeeze())
-    #    evd.append(reg.evidence(0.05))
+    #    evd.append(reg.evidence(sigma))
     #    print("Fit deg={} with evidence={:.1f}".format(deg, evd[-1]))
