@@ -18,7 +18,7 @@ rng = np.random.RandomState(14850)
 
 
 class SuperRegistration(object):
-    def __init__(self, images, deg, shifts=None, domain=None):
+    def __init__(self, images, deg, shifts=None, domain=None, gamma=0.):
         """
         Parameters
         ----------
@@ -40,6 +40,7 @@ class SuperRegistration(object):
         self.deg = min(deg, Ly//2, Lx//2)
         self.images = images
         self.images_k = np.fft.rfftn(images, axes=(1,2), norm='ortho')
+        self.gamma = gamma
 
         self.shifts = shifts
         self.N = len(self.images)
@@ -113,10 +114,13 @@ class SuperRegistration(object):
         self.set_params(params)
 
         c = self.slice(self.coef)
-        return np.array([
+        r = np.array([
                 self.comp(self.slice(dk) - self.slice(self.phase(d))*c)
                 for dk, d in zip(self.images_k, self.shiftiter)
             ]).ravel()
+        if self.gamma > 0:
+            r = np.concatenate((r, np.sqrt(self.gamma)*self.comp(c)))
+        return r
 
     def gradshifts(self, params=None):
         params = params if params is not None else self.params
@@ -125,7 +129,7 @@ class SuperRegistration(object):
         jac = []
         cky = 1j*self.ky*self.coef
         ckx = 1j*self.kx*self.coef
-        zeros = np.zeros(len(params)-2)
+        zeros = np.zeros(len(params)-2, dtype='float64')
         for n, d in enumerate(self.shifts):
             p = self.phase(d)
             j = np.array([])
@@ -136,6 +140,8 @@ class SuperRegistration(object):
                 else:
                     dy = zeros
                 j = np.concatenate((j, dy))
+            if self.gamma > 0:
+                j = np.concatenate((j, zeros))
             jac.append(j)
 
             j = np.array([])
@@ -145,6 +151,8 @@ class SuperRegistration(object):
                 else:
                     dx = zeros
                 j = np.concatenate((j, dx))
+            if self.gamma > 0:
+                j = np.concatenate((j, zeros))
             jac.append(j)
         
         return np.array(jac).T
@@ -199,10 +207,11 @@ class SuperRegistration(object):
         Estimate of the best coefficients is the average of all the inverse
         shifted data
         """
+        N = self.images.shape[0]
         return np.array([
             self.comp(self.slice(dk) * self.slice(self.phase(-d)))
             for dk, d in zip(self.images_k, self.shiftiter)
-        ]).mean(0)
+        ]).sum(0)/(N+self.gamma)
 
     def shiftres(self, shifts=None):
         if shifts is not None:
@@ -217,11 +226,12 @@ class SuperRegistration(object):
     def minshift(self, shifts0=None, **kwargs):
         shifts0 = shifts0 if shifts0 is not None else self.shifts.ravel()
         lm = LM(self.shiftres, self.shiftgrad)
+        if 'tol' in kwargs:
+            kwargs['tol'] = 1E-2
         self.shiftsol = lm.leastsq(shifts0, **kwargs)
         return self.shiftsol[0]
 
-    def fit(self, images=None, p0=None, sigma=None, relchange=1E-6, itnlim=200,
-             **kwargs):
+    def fit(self, images=None, p0=None, sigma=None, abschange=1E-6, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
             self.images_k = np.fft.rfftn(images, axes=(1,2), norm='ortho')
@@ -233,22 +243,20 @@ class SuperRegistration(object):
 
         r = self.res()
         c0 = r.T.dot(r)/2.
-        for i in range(itnlim):
+        converged, i = False, 0
+        while not converged:
             c = self.averagecoefs() 
             self.set_params(np.concatenate((self.shifts.ravel(), c)))
-            s = self.minshift(**kwargs)
+            s = self.minshift() # **kwargs)
 
             r = self.res()
             c1 = r.T.dot(r)/2.
-            if np.abs((c1 - c0)/c0) < relchange:
-                break
+            if np.abs((c1 - c0)) < abschange:
+                converged = True
             if iprint:
                 print("Outer Itn {} nlnprob = {}".format(i, c1))
             c0 = c1
-        if iprint and i < itnlim - 1:
-            print("Converged!")
-        elif:
-            print("Maximum number of iterations achieved")
+            i += 1
         j = self.gradshifts()
         jtj = j.T.dot(j).diagonal()
         sigma = self.estimatenoise() if sigma is None else sigma
@@ -258,11 +266,26 @@ class SuperRegistration(object):
     def evidence(self, sigma=None):
         s = sigma or self.estimatenoise()
         r = self.residual.ravel()
+        c = self.coef
         N = len(self.params)
         J = self.jac()
-        logdet = slogdet(J.T.dot(J))[1]
-        return (-r.dot(r)/s**2 + N*np.log(2*np.pi*s**2) - logdet)/2.
+        JTJ = J.T.dot(J)
+        logdet = np.log(JTJ.diagonal()).sum()
+        #logdet = slogdet(J.T.dot(J))[1]
+        return (-r.dot(r)/s**2 - self.gamma*np.sum(np.abs(c)**2)
+                + N*np.log(2*np.pi*s**2) - logdet)/2.
 
+    def evidence2(self, sigma=None):
+        s = self.estimatenoise() if sigma is None else sigma
+        r = np.concatenate((self.residual.ravel(), 
+                            s*np.sqrt(self.gamma)*np.abs(self.coef).ravel()))
+        n = len(self.params)
+        N = self.images.shape[0]
+        j = self.gradshifts()
+        jtj = j.T.dot(j).diagonal()
+        logdet = np.log(jtj).sum() + (n-len(jtj))*np.log(N+self.gamma)
+        # logdet is calculated by examining structure of jtj
+        return (-r.dot(r)/s**2 + n*np.log(2*np.pi*s**2) - logdet)/2.
 
 
 if __name__=="__main__":
@@ -280,9 +303,9 @@ if __name__=="__main__":
         return np.sum(ky**2*Ik2).real, np.sum(kx**2*Ik2).real
     
     import matplotlib.pyplot as plt
-    L = 64
-    deg = 30 
-    sigma = 0.03
+    L = 128
+    deg = L//2
+    sigma = 0.1
     img = md.powerlaw((L, L), 1.8, scale=L/6., rng=rng)
     shifts = np.random.randn(2)
     images = md.fakedata(0., [-shifts], L, img=img, offset=np.zeros(2),
@@ -290,18 +313,31 @@ if __name__=="__main__":
 
     data = images + sigma * np.random.randn(*images.shape)
 
-    reg = SuperRegistration(data, deg)
-    s1, s1_sigma = reg.fit(iprint=1, sigma=sigma)
+    reg = SuperRegistration(data, deg, gamma=1.15)
+    reg2 = SuperRegistration(data, deg, gamma=.1)
+    reg2.set_params(reg.params.copy())
+
+    #s1, s1_sigma = reg.fit(iprint=1, sigma=sigma)
+    #s1, s1_sigma = reg2.lmfit(iprint=1, tol=1E-8, sigma=sigma)
     s1_crb = sigma/np.sqrt(crb(img))
 
-    evd = []
+    evd, cost, ests = [], [], []
     orders = range(6, 25)
+    #gammas = 10**np.linspace(0., .5, num=40)-1
+    gammas = np.linspace(0., 4., num=40)
     results = []
     
     # deg = 19 was peak for img scale 1.8, L=128 and scale=L/6.
-    #for deg in orders:
-    #    reg = SuperRegistration(data, deg)
-    #    reg.fit()
-    #    results.append(reg.shifts.copy().squeeze())
-    #    evd.append(reg.evidence(sigma))
-    #    print("Fit deg={} with evidence={:.1f}".format(deg, evd[-1]))
+    for deg in orders:
+    #for g in gammas:
+        reg = SuperRegistration(data, deg, gamma=0.)
+        reg.fit(iprint=0)
+        r = reg.res()
+        cost.append(0.5*r.T.dot(r))
+        ests.append(reg.estimatenoise())
+        results.append(reg.shifts.copy().squeeze())
+        evd.append(reg.evidence2(sigma=sigma))
+        #print("Fit gamma={:.4f} with evd={:.1f} c={:.1f}".format(g, evd[-1],
+        #                                                    cost[-1]))
+        print("Fit deg={} with evd={:.1f} c={:.1f}".format(deg, evd[-1],
+                                                            cost[-1]))

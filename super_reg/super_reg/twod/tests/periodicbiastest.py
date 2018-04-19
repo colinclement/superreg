@@ -65,10 +65,12 @@ if __name__=="__main__":
     abscissa = np.linspace(0., 2., 50)
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
-    noises = np.linspace(0, 0.1, 3)
-    N = 8
+    noises = np.linspace(0, 0.1, 20)
+    N = 1000
+    deg = 13
+    # For this data set 13 maximized the evidence at sigma=.1
 
-    directory = 'results/N_{}-'.format(N)+today
+    directory = 'results/N_{}-deg_{}-'.format(N, deg)+today
 
     datakwargs = {
         'random': {'L': L, 'offset': np.zeros(2), 'shifts': [delta],
@@ -92,7 +94,7 @@ if __name__=="__main__":
     start = datetime.now()
     biastest_sr = BiasTest(datakwargs[data], N=N,
                            registration=SuperRegistration,
-                           noises=noises, deg=14)  # low noise need more deg 
+                           noises=noises, deg=deg)
     # Note deg=17 was tested by maximizing evidence in fourierseries.py
     p0 = biastest_sr.reg.p0.copy()
     p0 /= np.sqrt(len(p0))
@@ -130,12 +132,8 @@ if __name__=="__main__":
                              axis=axes[2], title="Super Registration")
 
     f.savefig(os.path.join(directory,"summary.pdf".format(data,mask)))
-    filename = os.path.join(
-        directory,"periodic-data-{}_mask-{}.pkl".format(data,mask)
-    )
-    filename_superreg = os.path.join(
-        directory, "periodic-superreg-data-{}_mask-{}.pkl".format(data,mask)
-    )
+    filename = os.path.join( directory,"periodic-shift.pkl")
+    filename_superreg = os.path.join( directory, "periodic-superreg.pkl")
     saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
                 alldata, shifts, img)
     saveresults(filename_superreg, results_superreg, noises, datakwargs, 
