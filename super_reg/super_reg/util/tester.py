@@ -17,14 +17,13 @@ class BiasTest(object):
         self._regkwargs = kwargs.copy()
         self.setdata(data_kwargs)
         self.registration = registration
-        self.reg = registration(self.data, *args, **kwargs)
         self.makereg(self.data, *args, **kwargs)
 
     def setdata(self, data_kwargs):
         self.data = md.fakedata(0., **data_kwargs)
 
     def makereg(self, data, *args, **kwargs):
-        self.reg = registration(self.data, *args, **kwargs)
+        self.reg = self.registration(self.data, *args, **kwargs)
 
     def getdata(self, noise):
         noisegen = self.data_kwargs.get('noisegen', np.random.randn)
@@ -40,6 +39,15 @@ class BiasTest(object):
             p1s += [p1]
             p1_sigmas += [p1_sigma]
         return p1s, p1_sigmas
+
+    def repeat_evidence(self, noise, **kwargs):
+        p1s, p1_sigmas, evds = [], [], []
+        for i in range(self.N):
+            p1, p1_sigma = self.reg.fit(self.getdata(noise), **kwargs)
+            p1s += [p1.squeeze()]
+            p1_sigmas += [p1_sigma.squeeze()]
+            evds += [self.reg.evidence(sigma=noise)]
+        return p1s, p1_sigmas, evds
 
     def noiseloop(self, **kwargs):
         alldata = []
@@ -65,9 +73,9 @@ class BiasTest(object):
         alldata = []
         for k in kwarglist:
             self.makereg(self.data, **k)
-            p1s, p1_sigmas = self.repeat(noise, **kwargs)
-            alldata += [[p1s, p1_sigmas]]
-        return np.array(alldata)
+            p1s, p1_sigmas, evds = self.repeat_evidence(noise, **kwargs)
+            alldata += [[p1s, p1_sigmas, evds]]
+        return alldata
 
     def plotbias(self, results, abscissa=None, xlabel=None, axis=None, title=None):
         biases = np.array(results['bias'])
