@@ -16,10 +16,15 @@ class BiasTest(object):
 
         self._regkwargs = kwargs.copy()
         self.setdata(data_kwargs)
+        self.registration = registration
         self.reg = registration(self.data, *args, **kwargs)
+        self.makereg(self.data, *args, **kwargs)
 
     def setdata(self, data_kwargs):
         self.data = md.fakedata(0., **data_kwargs)
+
+    def makereg(self, data, *args, **kwargs):
+        self.reg = registration(self.data, *args, **kwargs)
 
     def getdata(self, noise):
         noisegen = self.data_kwargs.get('noisegen', np.random.randn)
@@ -52,6 +57,14 @@ class BiasTest(object):
         for d in deltas:
             dkwargs['shifts'] = d
             self.setdata(dkwargs)
+            p1s, p1_sigmas = self.repeat(noise, **kwargs)
+            alldata += [[p1s, p1_sigmas]]
+        return np.array(alldata)
+
+    def kwargloop(self, kwarglist, noise=0.075, **kwargs):
+        alldata = []
+        for k in kwarglist:
+            self.makereg(self.data, **k)
             p1s, p1_sigmas = self.repeat(noise, **kwargs)
             alldata += [[p1s, p1_sigmas]]
         return np.array(alldata)
