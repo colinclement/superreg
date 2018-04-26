@@ -263,7 +263,7 @@ class SuperRegistration(object):
         var = sigma/np.sqrt(jtj)
         return self.shifts, var.reshape(*self.shifts.shape)
 
-    def evidence(self, sigma=None):
+    def evidence_old(self, sigma=None):
         s = sigma or self.estimatenoise()
         r = self.residual.ravel()
         c = self.coef
@@ -271,11 +271,10 @@ class SuperRegistration(object):
         J = self.jac()
         JTJ = J.T.dot(J)
         logdet = np.log(JTJ.diagonal()).sum()
-        #logdet = slogdet(J.T.dot(J))[1]
         return (-r.dot(r)/s**2 - self.gamma*np.sum(np.abs(c)**2)
                 + N*np.log(2*np.pi*s**2) - logdet)/2.
 
-    def evidence2(self, sigma=None):
+    def evidence(self, sigma=None):
         s = self.estimatenoise() if sigma is None else sigma
         r = np.concatenate((self.residual.ravel(), 
                             s*np.sqrt(self.gamma)*np.abs(self.coef).ravel()))
