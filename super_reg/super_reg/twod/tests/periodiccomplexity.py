@@ -54,7 +54,6 @@ def loadresults(directory):
 if __name__=="__main__":
     from datetime import datetime
     import matplotlib as mpl
-    #mpl.use('Agg')
     import matplotlib.pyplot as plt
 
     today = datetime.today().isoformat().split("T")[0]
@@ -63,15 +62,16 @@ if __name__=="__main__":
     delta = rng.rand(2)*2
     padding = 0
     abscissa = np.linspace(0., 2., 50)
-    deglist = np.array(range(2, 32))
+    deglist = np.array(range(2, 64))
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
     noises = np.linspace(0, 0.1, 20)
-    N = 20
+    noise = 0.05
+    N = 1000
     deg = 13
-    # For this data set 13 maximized the evidence at sigma=.1
 
-    directory = 'results/N_{}-deg_{}-'.format(N, deg)+today
+    directory = 'results/complexity-N_{}-deglist_{}-noise_{}-'.format(N, len(deglist),
+                                                           noise)+today
 
     datakwargs = {'L': L, 'offset': np.zeros(2), 'shifts': [delta],
                    'img': md.powerlaw((L, L), 1.8, scale=L/6., rng=rng),
@@ -84,38 +84,35 @@ if __name__=="__main__":
     biastest = BiasTest(datakwargs, N=N,
                         registration=SuperRegistration,
                         noises=noises, deg=deg)
-    # Note deg=17 was tested by maximizing evidence in fourierseries.py
     p0 = biastest.reg.p0.copy()
     p0 /= np.sqrt(len(p0))
-    #alldata = biastest.noiseloop(p0=p0, sigma=0.).squeeze()
 
     kwarglist = [dict(deg=d) for d in deglist]
-    alldata = biastest.kwargloop(kwarglist, noise=0.05, iprint=1)
+    alldata = biastest.kwargloop(kwarglist, noise=noise)
     print("Finished noise loop in {}".format(datetime.now()-start))
 
-    results_superreg = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
-    for dds in alldata_sr:
-        p1s, p1_sigmas = dds
-        results_superreg['bias'] += [-np.mean(p1s[:,1])-delta[1]]
+    results = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': [],
+               'evidence': [], 'evidence_std': []}
+    for dds in alldata:
+        p1s, p1_sigmas, evds = np.array(dds[0]), np.array(dds[1]), np.array(dds[2])
+        results['bias'] += [-np.mean(p1s[:,1])-delta[1]]
+        results['evidence'] += [np.mean(evds)]
+        results['evidence_std'] += [np.std(evds)]
         # Convention in superreg changes sign of answer
-        results_superreg['bias_std'] += [np.std(p1s[:,1])]
-        results_superreg['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
-        results_superreg['err'] += [np.mean(p1_sigmas[:,1])]
+        results['bias_std'] += [np.std(p1s[:,1])]
+        results['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
+        results['err'] += [np.mean(p1_sigmas[:,1])]
 
     img = datakwargs['img']
 
-    #fig, axes = plt.subplots(1, 3, figsize=(24,8)) 
-    #axes[0].matshow(img, cmap='Greys')
-    #axes[0].axis('off')
-    #f, a = biastest.plotbias(results_x, axis=axes[1],
-    #                         title="{} data with {} mask".format(data,mask))
-    #f, a = biastest.plotbias(results_superreg,
-    #                         axis=axes[2], title="Super Registration")
+    fig, axe = plt.subplots()
+    axe.errorbar(deglist, results['evidence'], yerr=results['evidence_std'])
+    axe2 = axe.twinx()
+    axe2.plot(deglist, results['bias_std'])
+    axe2.plot(deglist, results['err'])
+    #plt.show()
 
-    #f.savefig(os.path.join(directory,"summary.pdf".format(data,mask)))
-    filename = os.path.join( directory,"periodic-shift.pkl")
-    filename_superreg = os.path.join( directory, "periodic-superreg.pkl")
+    fig.savefig(os.path.join(directory,"summary.pdf"))
+    filename = os.path.join(directory, "periodic-superreg.pkl")
     saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
                 alldata, shifts, img)
-    saveresults(filename_superreg, results_superreg, noises, datakwargs, 
-                mask_kwargs, alldata_sr, shifts, img)
