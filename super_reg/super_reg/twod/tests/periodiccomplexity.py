@@ -66,8 +66,8 @@ if __name__=="__main__":
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
     noises = np.linspace(0, 0.1, 20)
-    noise = 0.05
-    N = 1000
+    noise = 0.075
+    N = 2000
     deg = 13
 
     directory = 'results/complexity-N_{}-deglist_{}-noise_{}-'.format(N, len(deglist),
@@ -114,5 +114,5 @@ if __name__=="__main__":
 
     fig.savefig(os.path.join(directory,"summary.pdf"))
     filename = os.path.join(directory, "periodic-superreg.pkl")
-    saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
+    saveresults(filename, results, noises, datakwargs, mask_kwargs,
                 alldata, shifts, img)
