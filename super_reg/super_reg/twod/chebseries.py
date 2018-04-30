@@ -6,8 +6,10 @@ from itertools import chain
 from matplotlib.pyplot import *
 from numpy.polynomial.chebyshev import chebval, chebval2d
 from numpy.linalg import slogdet
+from scipy.linalg import svdvals
 
 from super_reg.util.leastsq import LM
+import super_reg.util.makedata as md
 
 DEGREE = 20
 
@@ -46,7 +48,9 @@ class SuperRegistration(object):
         self.shape = self.images[0].shape
 
         if self.shifts is None:
-            self.shifts = rng.rand(self.N-1, 2)
+            self.shifts = np.array([self.firstguess(self.images[0], i) for i in
+                                    self.images[1:]])
+            self.shifts += rng.rand(self.N-1, 2) - 0.5
 
         self.coef = np.random.randn(deg+1, deg+1)/(deg+1.)
 
@@ -176,6 +180,23 @@ class SuperRegistration(object):
             params = self.params
         r = self.res(params)
         return np.sqrt(r.dot(r)/len(r))
+    
+    def firstguess(self, imag1, imag0):
+        """ 
+        Naive estimation of the translation by simple cross-correlation
+        input:
+            (optional)
+            imag1 : array_like image of shape (Ly, Lx). Default is self.imag1
+            imag0 : array_like iamge of shape (Ly, Lx). Default is self.imag0
+        returns:
+            delta : array_like of length 2 [dy, dx]
+        """
+        assert imag1.shape == imag0.shape, "Images must share shapes"
+        Ly, Lx = imag1.shape
+        imag1_k, imag0_k = np.fft.fftn(imag1), np.fft.fftn(imag0)
+        corr = np.fft.fftshift(np.fft.ifft2(imag1_k*imag0_k.conj()))
+        maxind = np.argmax(corr)
+        return np.array([maxind//Lx-Ly/2., maxind % Lx - Lx/2.]) 
 
     def fit(self, images=None, p0=None, **kwargs):
         if images is not None:  # reset images and parameters
@@ -194,11 +215,11 @@ class SuperRegistration(object):
         return shifts, sigma/np.sqrt(jtjshifts)
 
     def evidence(self, sigma=None):
-        s = sigma or self.estimatenoise()
+        s = sigma if sigma is not None else self.estimatenoise()
         r = self.res()
         N = len(self.params)
-        J = self.grad()
-        logdet = slogdet(J.T.dot(J))[1]
+        j = self.grad()
+        logdet = 2*np.log(svdvals(j)).sum()
         return (-r.dot(r)/s**2 + N*np.log(2*np.pi*s**2) - logdet)/2.
 
 
@@ -210,12 +231,26 @@ if __name__=="__main__":
 
     deg = 8
     L = 32
-    datamaker0 = fs.SuperRegistration(np.zeros((2, L, L)), deg=deg)
-    datamaker0.shifts = np.array([3*np.random.randn(2)])
-    shifts = datamaker0.shifts
-    fdata = datamaker0.model
-    fdata /= fdata.std()
+    img = md.powerlaw((2*L, 2*L), 1.8, scale=2*L/6., rng=rng)
+    shifts = rng.randn(2)
+    images = md.fakedata(0., [shifts], L, img=img, offset=L*np.ones(2),
+                         mirror=False)
+    images /= images.ptp()
 
-    data = fdata + 0.05 * np.random.randn(*fdata.shape)
+    sigma = 0.025
+    data = images + sigma * rng.randn(*images.shape)
 
-    reg = SuperRegistration(data, 16)
+    reg = SuperRegistration(data, 18)
+    #s1, s1s = reg.fit(iprint=1, delta=1E-8)
+    
+    deglist = np.arange(6, 26)
+    evd = []
+    ans = []
+    ans_sigma = []
+    #for d in deglist:
+    #    reg = SuperRegistration(data, d, shifts=np.array([shifts]))
+    #    s1, s1s = reg.fit(iprint=0, delta=1E-8, itnlim=100)
+    #    evd.append(reg.evidence(sigma=sigma))
+    #    ans.append(s1.squeeze())
+    #    ans_sigma.append(s1s.squeeze())
+    #    print("Finished d={}".format(d))
