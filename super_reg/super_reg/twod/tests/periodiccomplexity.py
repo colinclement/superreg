@@ -50,6 +50,18 @@ def loadresults(directory):
                    'alldata': alldata, 'shifts': shifts, 'img': img}
     return data
 
+def crb(img, deg=None):
+    Ly, Lx = img.shape
+    degy = deg if deg is not None else Ly
+    degx = deg if deg is not None else Lx
+    ky = np.fft.fftfreq(Ly, d=1./(2*np.pi))
+    ky[degy:] = 0.
+    kx = np.fft.fftfreq(Lx, d=1./(2*np.pi))
+    kx[degx:] = 0.
+    Ik = np.fft.fftn(img, norm='ortho')
+    Ik2 = Ik*Ik.conj()
+    return np.sum(ky**2*Ik2).real, np.sum(kx**2*Ik2).real
+ 
 
 if __name__=="__main__":
     from datetime import datetime
@@ -110,7 +122,6 @@ if __name__=="__main__":
     axe2 = axe.twinx()
     axe2.plot(deglist, results['bias_std'])
     axe2.plot(deglist, results['err'])
-    #plt.show()
 
     fig.savefig(os.path.join(directory,"summary.pdf"))
     filename = os.path.join(directory, "periodic-superreg.pkl")
