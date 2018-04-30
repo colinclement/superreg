@@ -24,8 +24,8 @@ class LM(object):
                         1: 'Maximum number of iterations reached',
                         2: 'Convergence criterion satisfied'}
 
-    def leastsq(self, p0, maxiter=40, delta=1E-6, accept=5., 
-                reject=3., iprint=0, **kwargs):
+    def leastsq(self, p0, maxiter=40, delta=1E-6, accept=10., 
+                reject=5., iprint=0, geo=True, **kwargs):
         """
         A custom implementation of the Levenburg Marquardt least-squares 
         optimization algorithm.
@@ -36,6 +36,7 @@ class LM(object):
                     changes by less than delta
             accept: float, factor to increase lambda upon accepting a step
             reject: float, factor to decrease lambda upon rejecting a step
+            geo: True/False, whether or not to use geodesic acceleration
 
             iprint: integer, 1 for few messages, 2 for more messages
             kwargs:
@@ -51,7 +52,9 @@ class LM(object):
             message = 2 is algorithm achieved convergence criterion
         """
         lamb = float(kwargs.get('lamb', 10.)) #start with small downward grad steps
+        h = kwargs.get('h', 1E-5)
         maxtries = kwargs.get('maxtries', 200)
+        truncerr = 0.
 
         p1 = copy(p0)
         for itn in range(maxiter):
@@ -70,9 +73,19 @@ class LM(object):
                     self._report = [p1, trial, lamb]
                     return p1, JTJ.diagonal(), message
                 try:
+                    jtjdiag = JTJ.diagonal()
                     JTJ[np.diag_indices_from(JTJ)] += lamb
-                    self._delta = solve(JTJ, JTr)
-                    JTJ[np.diag_indices_from(JTJ)] -= lamb
+                    self.delta0 = -1 * solve(JTJ, JTr)
+
+                    if geo:
+                        self._rpp = 2./h*((self.res(p1+h*self.delta0) - res0)/h
+                                          - J.dot(self.delta0))
+                        self.delta1 = -0.5*solve(JTJ, J.T.dot(self._rpp))
+                        truncerr = 2*(np.sqrt(self.delta1.dot(self.delta1))/
+                                      np.sqrt(self.delta0.dot(self.delta0)))
+
+                    JTJ[np.diag_indices_from(JTJ)] = jtjdiag
+
                 except LinAlgError as er:
                     print("\tSingular matrix, lamb = {}".format(lamb))
                     JTJ[np.diag_indices_from(JTJ)] -= lamb
@@ -80,19 +93,25 @@ class LM(object):
                     tries += 1
                     continue
                 lamb = np.nan_to_num(lamb)
-                # Reset JTJ diagonals
 
-                trial = p1 - self._delta
+                trial = p1 + self.delta0
 
                 res1 = self.res(trial, *self.args)
                 nlnprob1 = 0.5*res1.dot(res1)
                  
-                if nlnprob1 < nlnprob0: #success
-                    lamb /= accept
+                if geo and truncerr > 2:
+                    success = False
+                elif nlnprob1 < nlnprob0: #success
                     success = True
-                    p1 = trial
                 else: #failed step
+                    success = False 
+
+                if success:
+                    lamb /= accept
+                    p1 = trial
+                else:
                     lamb *= reject
+
                 tries += 1
                 if iprint > 1:
                     print("\tsuccess = {}, lnprob = {}, \
