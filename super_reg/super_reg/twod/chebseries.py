@@ -214,13 +214,16 @@ class SuperRegistration(object):
 
         return shifts, sigma/np.sqrt(jtjshifts)
 
-    def evidence(self, sigma=None):
+    def evidenceparts(self, sigma=None):
         s = sigma if sigma is not None else self.estimatenoise()
         r = self.res()
         N = len(self.params)
         j = self.grad()
         logdet = 2*np.log(svdvals(j)).sum()
-        return (-r.dot(r)/s**2 + N*np.log(2*np.pi*s**2) - logdet)/2.
+        return np.array([-r.dot(r)/s**2, N*np.log(2*np.pi*s**2), -logdet])/2.
+
+    def evidence(self, sigma=None):
+        return self.evidenceparts(sigma).sum()
 
 
 if __name__=="__main__":
@@ -244,13 +247,27 @@ if __name__=="__main__":
     #s1, s1s = reg.fit(iprint=1, delta=1E-8)
     
     deglist = np.arange(6, 26)
+    tries = 4
     evd = []
     ans = []
     ans_sigma = []
     #for d in deglist:
-    #    reg = SuperRegistration(data, d, shifts=np.array([shifts]))
-    #    s1, s1s = reg.fit(iprint=0, delta=1E-8, itnlim=100)
-    #    evd.append(reg.evidence(sigma=sigma))
+    #    minnlnprob = 0.
+    #    for i in range(tries):
+    #        reg = SuperRegistration(data, d)
+    #        s1, s1s = reg.fit(iprint=0, delta=1E-8, itnlim=100)
+    #        r = reg.res()
+    #        nlnprob = r.T.dot(r)/2.
+    #        print("\tnlnprob = {}".format(nlnprob))
+    #        if minnlnprob < nlnprob:
+    #            minnlnprob = nlnprob
+    #            bestreg = reg
+
+    #    evd.append(reg.evidenceparts(sigma=sigma))
     #    ans.append(s1.squeeze())
     #    ans_sigma.append(s1s.squeeze())
-    #    print("Finished d={}".format(d))
+    #    print("Finished d={} with evd={}".format(d, evd[-1].sum()))
+
+    evd = np.array(evd)
+    ans = np.array(ans)
+    ans_sigma = np.array(ans_sigma)
