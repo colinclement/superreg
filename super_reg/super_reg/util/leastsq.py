@@ -52,59 +52,63 @@ class LM(object):
             message = 2 is algorithm achieved convergence criterion
         """
         lamb = float(kwargs.get('lamb', 10.)) #start with small downward grad steps
-        h = kwargs.get('h', 1E-5)
+        h = kwargs.get('h', 1E-4)
         maxtries = kwargs.get('maxtries', 200)
         truncerr = 0.
 
         p1 = copy(p0)
         for itn in range(maxiter):
-            res0 = self.res(p1, *self.args)
-            nlnprob0 = 0.5*res0.dot(res0)
+            r0 = self.res(p1, *self.args)
+            nlnprob0 = r0.dot(r0)/2.
+
             if iprint:
                 print("Itn {}: nlnprob = {}".format(itn, nlnprob0))
 
-            J = self.jac(p1, *self.args)
-            JTJ = J.T.dot(J)
-            JTr = J.T.dot(res0)
+            j = self.jac(p1, *self.args)
+            jtj = j.T.dot(j)
+            jtr = j.T.dot(r0)
             
             success, tries, message = False, 0, 0
             while not success:
                 if tries == maxtries:
                     self._report = [p1, trial, lamb]
-                    return p1, JTJ.diagonal(), message
+                    return p1, jtj.diagonal(), message
                 try:
-                    jtjdiag = JTJ.diagonal()
-                    JTJ[np.diag_indices_from(JTJ)] += lamb
-                    self.delta0 = -1 * solve(JTJ, JTr)
+                    jtjdiag = jtj.diagonal()
+                    jtj[np.diag_indices_from(jtj)] += lamb
+                    self.d0 = - solve(jtj, jtr)
 
                     if geo:
-                        self._rpp = 2./h*((self.res(p1+h*self.delta0) - res0)/h
-                                          - J.dot(self.delta0))
-                        self.delta1 = -0.5*solve(JTJ, J.T.dot(self._rpp))
-                        truncerr = 2*(np.sqrt(self.delta1.dot(self.delta1))/
-                                      np.sqrt(self.delta0.dot(self.delta0)))
+                        self._rpp = 2./h*((self.res(p1+h*self.d0) - r0)/h
+                                          - j.dot(self.d0))
+                        self.d1 = - solve(jtj, j.T.dot(self._rpp))/2
+                        truncerr = 2*(np.sqrt(self.d1.dot(self.d1))/
+                                      np.sqrt(self.d0.dot(self.d0)))
 
-                    JTJ[np.diag_indices_from(JTJ)] = jtjdiag
+                    jtj[np.diag_indices_from(jtj)] = jtjdiag
 
                 except LinAlgError as er:
                     print("\tSingular matrix, lamb = {}".format(lamb))
-                    JTJ[np.diag_indices_from(JTJ)] -= lamb
+                    jtj[np.diag_indices_from(jtj)] -= lamb
                     lamb *= reject
                     tries += 1
                     continue
+
                 lamb = np.nan_to_num(lamb)
 
-                trial = p1 + self.delta0
+                trial = p1 + self.d0
+                if geo:
+                    trial += self.d1
 
-                res1 = self.res(trial, *self.args)
-                nlnprob1 = 0.5*res1.dot(res1)
+                r1 = self.res(trial, *self.args)
+                nlnprob1 = r1.dot(r1)/2.
                  
                 if geo and truncerr > 2:
-                    success = False
+                    pass 
                 elif nlnprob1 < nlnprob0: #success
                     success = True
                 else: #failed step
-                    success = False 
+                    pass 
 
                 if success:
                     lamb /= accept
@@ -127,4 +131,4 @@ class LM(object):
         message += 1
         if iprint:
             print(self.msgdict[message])
-        return p1, JTJ.diagonal(), message
+        return p1, jtj.diagonal(), message
