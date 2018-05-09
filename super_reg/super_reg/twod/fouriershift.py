@@ -270,7 +270,6 @@ class Register(object):
             self.initialize(images)
         
         delta0 = delta0 if delta0 is not None else self.firstguess()
-        #delta0 += 1E-3 * np.random.randn(2)
         iprint = kwargs.get("iprint", 0)
 
         if kwargs.get('maskdict'):
