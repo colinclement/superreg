@@ -5,21 +5,15 @@ from itertools import chain
 
 from matplotlib.pyplot import *
 from numpy.polynomial.chebyshev import chebval, chebval2d
-from numpy.linalg import slogdet
-from scipy.linalg import svdvals
+from scipy.linalg import svdvals, solve
 
 from super_reg.util.leastsq import LM
+from super_reg.twod.fouriershift import Register
 import super_reg.util.makedata as md
 
 DEGREE = 20
 
 rng = np.random.RandomState(14850)
-
-#TODO: 
-#   1. Test for biases with finite difference derivative
-#   2. Implement correct gradient for coefficients
-#   3. Make and test fake data that isn't perfectly representable
-#   4. Investigate model complexity
 
 
 class SuperRegistration(object):
@@ -47,16 +41,15 @@ class SuperRegistration(object):
         self.N = len(self.images)
         self.shape = self.images[0].shape
 
-        if self.shifts is None:
-            self.shifts = np.array([self.firstguess(self.images[0], i) for i in
-                                    self.images[1:]])
-            self.shifts += rng.rand(self.N-1, 2) - 0.5
-
-        self.coef = np.random.randn(deg+1, deg+1)/(deg+1.)
-
         self.x = 1. * np.arange(self.shape[1])
         self.y = 1. * np.arange(self.shape[0])
         self.yg, self.xg = np.meshgrid(self.y, self.x, indexing='ij')
+
+        if self.shifts is None:
+            self.shifts = np.array([self.firstguess(self.images[0], i) for i in
+                                    self.images[1:]])
+
+        self.coef = self.estimatecoefs()
 
     def domain(self, shifts=None):
         """   Smallest rectangle containing all shifted images  """
@@ -100,12 +93,12 @@ class SuperRegistration(object):
         return chebval2d(cy, cx, self.coef)
 
     @property
-    def residual(self):
+    def r(self):
         return self.model - self.images
 
     @property
-    def residual_k(self):
-        rk = np.abs(np.fft.fftn(self.residual, axes=(1,2)))**2
+    def r_k(self):
+        rk = np.abs(np.fft.fftn(self.r, axes=(1,2)))**2
         rk[:,0,0] = 0.  # hiding sum
         return np.fft.fftshift(rk, axes=(1,2))
 
@@ -120,15 +113,29 @@ class SuperRegistration(object):
             self.shifts = shifts
 
         jac = np.zeros((self.N * np.prod(self.shape), self.shifts.size))
-        p0 = self.params
+        p0 = self.params.copy()
         for i in range(self.shifts.size):
-            p0[i] += h
+            c = p0[i]
+            p0[i] = c + h
             r0 = self.res(params=p0)
-            p0[i] -= 2 * h
+            p0[i] = c - h
             r1 = self.res(params=p0)
-            p0[i] += h
+            p0[i] = c
             jac[:,i] = (r0 - r1)/(2 * h)
         return jac
+
+    def tmatrix(self, shift):
+        sy, sx = shift
+        eye = np.identity(self.deg+1)
+        d = self.deg + 1
+        M = d * d
+        T = np.zeros((self.images[0].size, M))
+        for m in range(d):
+            for n in range(d):
+                cy, cx = self.coord(self.y + sy, self.x + sx)
+                T[:, m*d+n] = (chebval(cy, eye[m])[:,None] * 
+                               chebval(cx, eye[n])[None,:]).ravel()
+        return T
 
     def gradcoef(self):
         M = np.prod(self.shape)
@@ -163,11 +170,12 @@ class SuperRegistration(object):
         r0 = self.res(p0)
         j = []
         for i in range(len(p0)):
-            p0[i] += h
+            c = p0[i]
+            p0[i] = c + h
             res0 = self.res(p0)
-            p0[i] -= 2*h
+            p0[i] = c - h
             res1 = self.res(p0)
-            p0[i] += h
+            p0[i] = c
 
             j += [(res0 - res1) / (2*h)]
 
@@ -182,21 +190,17 @@ class SuperRegistration(object):
         return np.sqrt(r.dot(r)/len(r))
     
     def firstguess(self, imag1, imag0):
-        """ 
-        Naive estimation of the translation by simple cross-correlation
-        input:
-            (optional)
-            imag1 : array_like image of shape (Ly, Lx). Default is self.imag1
-            imag0 : array_like iamge of shape (Ly, Lx). Default is self.imag0
-        returns:
-            delta : array_like of length 2 [dy, dx]
-        """
-        assert imag1.shape == imag0.shape, "Images must share shapes"
-        Ly, Lx = imag1.shape
-        imag1_k, imag0_k = np.fft.fftn(imag1), np.fft.fftn(imag0)
-        corr = np.fft.fftshift(np.fft.ifft2(imag1_k*imag0_k.conj()))
-        maxind = np.argmax(corr)
-        return np.array([maxind//Lx-Ly/2., maxind % Lx - Lx/2.]) 
+        reg = Register([imag1, imag0])
+        return reg.fit()[0]  # convention is opposite for marginal
+
+    def estimatecoefs(self):
+        tmats = [self.tmatrix(s) for s in self.shiftiter]
+        A = np.sum([t.T.dot(t) for t in tmats], 0)
+        b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
+        return solve(A, b).reshape(self.deg+1,-1)
+
+    def setoptimizer(self):
+        self.opt = LM(self.res, self.grad)
 
     def fit(self, images=None, p0=None, **kwargs):
         if images is not None:  # reset images and parameters
@@ -204,8 +208,8 @@ class SuperRegistration(object):
         p0 = p0 if p0 is not None else self.params
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            lm = LM(self.res, self.grad)
-            self.sol = lm.leastsq(p0, **kwargs)
+            self.setoptimizer()
+            self.sol = self.opt.leastsq(p0, **kwargs)
         j = self.grad()
         jtj = j.T.dot(j)
         sigma = self.estimatenoise()
@@ -247,26 +251,18 @@ if __name__=="__main__":
     #s1, s1s = reg.fit(iprint=1, delta=1E-8)
     
     deglist = np.arange(6, 26)
-    tries = 4
     evd = []
     ans = []
     ans_sigma = []
-    #for d in deglist:
-    #    minnlnprob = 0.
-    #    for i in range(tries):
-    #        reg = SuperRegistration(data, d)
-    #        s1, s1s = reg.fit(iprint=0, delta=1E-8, itnlim=100)
-    #        r = reg.res()
-    #        nlnprob = r.T.dot(r)/2.
-    #        print("\tnlnprob = {}".format(nlnprob))
-    #        if minnlnprob < nlnprob:
-    #            minnlnprob = nlnprob
-    #            bestreg = reg
-
-    #    evd.append(reg.evidenceparts(sigma=sigma))
-    #    ans.append(s1.squeeze())
-    #    ans_sigma.append(s1s.squeeze())
-    #    print("Finished d={} with evd={}".format(d, evd[-1].sum()))
+    for d in deglist:
+        reg = SuperRegistration(data, d)
+        s1, s1s = reg.fit(iprint=0, delta=1E-8, itnlim=100)
+        r = reg.res()
+            
+        evd.append(reg.evidenceparts(sigma=sigma))
+        ans.append(s1.squeeze())
+        ans_sigma.append(s1s.squeeze())
+        print("Finished d={} with evd={}".format(d, evd[-1].sum()))
 
     evd = np.array(evd)
     ans = np.array(ans)
