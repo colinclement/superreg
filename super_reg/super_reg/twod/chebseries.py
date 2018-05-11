@@ -187,7 +187,7 @@ class SuperRegistration(object):
         else:
             params = self.params
         r = self.res(params)
-        return np.sqrt(r.dot(r)/len(r))
+        return np.sqrt(r.dot(r)/(len(r)-len(params)))
     
     def firstguess(self, imag1, imag0):
         reg = Register([imag1, imag0])
