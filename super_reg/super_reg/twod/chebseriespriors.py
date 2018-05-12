@@ -96,11 +96,14 @@ class SRGaussianPriors(SuperRegistrationPriors):
 
     def evidenceparts(self, sigma=None):
         s = sigma if sigma is not None else self.estimatenoise()
-        r = self.resposterior(sigma=s)
+        r = self.res()
         N = len(self.params)
         j = self.gradposterior(sigma=s)
         logdet = 2*np.log(svdvals(j)).sum()
-        return np.array([-r.dot(r)/s**2, N*np.log(2*np.pi*s**2), -logdet])/2.
+        jtr = j[:self.images.size].T.dot(r)
+        rcorrection = jtr.T.dot(solve(j.T.dot(j), jtr))/s**2
+        return np.array([-r.dot(r)/s**2, N*np.log(2*np.pi*s**2), -logdet,
+                         rcorrection])/2.
 
 
 if __name__=="__main__":
@@ -123,24 +126,25 @@ if __name__=="__main__":
     reg = SRGaussianPriors(data, 18, gamma=.1)
     #s1, s1s = reg.fit(iprint=1, delta=1E-8, maxiter=100)
     
-    gammalist = np.logspace(-2., 2., num=20)
-    degree = 30
-    evd = []
-    costs = []
-    ans = []
-    ans_sigma = []
-    for g in gammalist:
-        reg = SRGaussianPriors(data, degree, gamma=g)
-        s1, s1s = reg.fit(iprint=0, delta=1E-6, itnlim=100)
-        r = reg.res()
-        nlnprob = r.T.dot(r)/2.
+    if False:
+        gammalist = np.logspace(-2., 1.5, num=20)
+        degree = 30
+        evd = []
+        costs = []
+        ans = []
+        ans_sigma = []
+        for g in gammalist:
+            reg = SRGaussianPriors(data, degree, gamma=g)
+            s1, s1s = reg.fit(iprint=0, delta=1E-6, itnlim=100)
+            r = reg.res()
+            nlnprob = r.T.dot(r)/2.
 
-        costs.append(nlnprob)
-        evd.append(reg.evidenceparts(sigma=sigma))
-        ans.append(s1.squeeze())
-        ans_sigma.append(s1s.squeeze())
-        print("Finished g={} with evd={}".format(g, evd[-1].sum()))
+            costs.append(nlnprob)
+            evd.append(reg.evidenceparts(sigma=sigma))
+            ans.append(s1.squeeze())
+            ans_sigma.append(s1s.squeeze())
+            print("Finished g={} with evd={}".format(g, evd[-1].sum()))
 
-    evd = np.array(evd)
-    ans = np.array(ans)
-    ans_sigma = np.array(ans_sigma)
+        evd = np.array(evd)
+        ans = np.array(ans)
+        ans_sigma = np.array(ans_sigma)
