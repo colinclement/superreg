@@ -23,7 +23,8 @@ class SuperRegistrationPriors(SuperRegistration):
         degs = np.arange(deg+1)
         # TODO: consider whether or not there should be a prior on the constant
         # shift (probably not...)
-        self.mdist = np.hypot(degs[:,None], degs[None,:])
+        #self.mdist = np.hypot(degs[:,None], degs[None,:])
+        self.mdist = degs[:,None] + degs[None,:]
         S = 2 * (len(images)-1)
         M, N = (deg+1)**2+S, images.size
         self.glogp = np.zeros((M-S, M))
@@ -90,7 +91,7 @@ class SRGaussianPriors(SuperRegistrationPriors):
         self.glogp[:, S:] = sigma * np.diagflat(self.gmat)
         return self.glogp
 
-    def estimatecoefs(self):
+    def bestcoef(self):
         tmats = [self.tmatrix(s) for s in self.shiftiter]
         A = np.sum([t.T.dot(t) for t in tmats], 0)
         b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
@@ -112,6 +113,9 @@ class SRGaussianPriors(SuperRegistrationPriors):
         logdetgtg = np.log(self.gmat[1:]**2).sum()  # constant term is zero
         return np.array([-r.dot(r)/s**2, -lp.dot(lp), -N*np.log(2*np.pi*s**2), 
                          -logdetA, logdetgtg])/2.
+
+    def cost(self, params=None):
+        return np.sum(self.resposterior(params)**2)/2.
 
     def n_effective(self, params=None, gamma=None, sigma=None):
         s = sigma if sigma is not None else self.estimatenoise()
@@ -153,12 +157,15 @@ if __name__=="__main__":
     evdloop = True
 
     reg = SRGaussianPriors(data, 30, gamma=1)
+    p = reg.params.copy()
     if not evdloop:
         s1, s1s = reg.fit(iprint=1, delta=1E-8, maxiter=100)
+        #reg.set_params(p)
+        #s1i, s1si = reg.itnfit(iprint=0, delta=1E-8, maxiter=100)
     
     if evdloop:
-        gammalist = np.logspace(.5, 1.5, num=20)
-        degree = 30
+        gammalist = np.logspace(.5, 1.2, num=20)
+        degree = 20
         evd = []
         costs = []
         ans = []
