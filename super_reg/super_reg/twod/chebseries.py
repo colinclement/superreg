@@ -219,7 +219,7 @@ class SuperRegistration(object):
         jtj = j.T.dot(j)
         return sigma/np.sqrt(jtj.diagonal())
 
-    def lmfit(self, images=None, p0=None, sigma=None, **kwargs):
+    def fit(self, images=None, p0=None, sigma=None, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
         p0 = p0 if p0 is not None else self.params
@@ -233,11 +233,9 @@ class SuperRegistration(object):
         return shifts, perrors[:shifts.size].reshape(*shifts.shape)
 
     def cost(self, params=None):
-        if params is not None:
-            self.set_params(params)
-        return np.sum(self.res()**2)
+        return np.sum(self.res(params)**2)/2.
     
-    def fit(self, images=None, p0=None, sigma=None, tol=1E-6, **kwargs):
+    def itnfit(self, images=None, p0=None, sigma=None, tol=1E-6, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
         if p0 is not None:
@@ -246,11 +244,15 @@ class SuperRegistration(object):
         r0 = self.cost()
         converged = False
         while not converged:
-            self.coef = self.bestcoef()
-            self.shifts = self.bestshifts(**kwargs)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.coef = self.bestcoef()
+                self.shifts = self.bestshifts(**kwargs)
             r1 = self.cost()
-            print("{} {} ".format(r1, (r1 - r0)/r0))
-            if np.abs((r1 - r0)/r0) < tol:
+            f = np.abs((r1 - r0)/r0)
+            if kwargs.get('iprint', 0)+1>0:
+                print("{} {} ".format(r1, f))
+            if f < tol:
                 converged = True
             r0 = r1
 
@@ -288,8 +290,10 @@ if __name__=="__main__":
     sigma = 0.025
     data = images + sigma * rng.randn(*images.shape)
 
-    reg = SuperRegistration(data, 18)
-    s1, s1s = reg.fit(iprint=0, delta=1E-8)
+    reg = SuperRegistration(data, 16)
+    p = reg.params.copy()
+    s1, s1s = reg.fit(p0=p, iprint=0, delta=1E-8)
+    s1i, s1si = reg.itnfit(p0=p, iprint=0, tol=1E-8, delta=1E-8)
     
     deglist = np.arange(6, 26)
     evd = []
