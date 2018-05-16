@@ -49,7 +49,7 @@ class SuperRegistration(object):
             self.shifts = np.array([self.firstguess(self.images[0], i) for i in
                                     self.images[1:]])
 
-        self.coef = self.estimatecoefs()
+        self.coef = self.bestcoef()
 
     def domain(self, shifts=None):
         """   Smallest rectangle containing all shifted images  """
@@ -187,22 +187,39 @@ class SuperRegistration(object):
         else:
             params = self.params
         r = self.res(params)
-        return np.sqrt(r.dot(r)/(len(r)-len(params)))
+        return np.sqrt(0.5*r.dot(r)/(len(r)-len(params)))
     
     def firstguess(self, imag1, imag0):
         reg = Register([imag1, imag0])
         return reg.fit()[0]  # convention is opposite for marginal
 
-    def estimatecoefs(self):
+    def bestcoef(self):
         tmats = [self.tmatrix(s) for s in self.shiftiter]
         A = np.sum([t.T.dot(t) for t in tmats], 0)
         b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
         return solve(A, b).reshape(self.deg+1,-1)
 
+    def bestshifts(self, shifts=None, **kwargs):
+        if shifts is not None:
+            self.shifts = shifts
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = lambda s: self.res(np.concatenate([s, self.coef.ravel()]))
+            grad = lambda s: self.gradshifts(s.reshape(self.shifts.shape))
+            opt = LM(res, grad)
+            sol = opt.leastsq(self.shifts.ravel(), **kwargs)
+        return sol[0].reshape(self.shifts.shape)
+
     def setoptimizer(self):
         self.opt = LM(self.res, self.grad)
 
-    def fit(self, images=None, p0=None, **kwargs):
+    def paramerrors(self, params=None, sigma=None):
+        sigma = sigma if sigma is not None else self.estimatenoise()
+        j = self.grad(params)
+        jtj = j.T.dot(j)
+        return sigma/np.sqrt(jtj.diagonal())
+
+    def lmfit(self, images=None, p0=None, sigma=None, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
         p0 = p0 if p0 is not None else self.params
@@ -210,13 +227,37 @@ class SuperRegistration(object):
             warnings.simplefilter("ignore")
             self.setoptimizer()
             self.sol = self.opt.leastsq(p0, **kwargs)
-        j = self.grad()
-        jtj = j.T.dot(j)
-        sigma = self.estimatenoise()
+        perrors = self.paramerrors(sigma=sigma)
         shifts = self.shifts
-        jtjshifts = jtj.diagonal()[:shifts.size].reshape(*shifts.shape)
 
-        return shifts, sigma/np.sqrt(jtjshifts)
+        return shifts, perrors[:shifts.size].reshape(*shifts.shape)
+
+    def cost(self, params=None):
+        if params is not None:
+            self.set_params(params)
+        return np.sum(self.res()**2)
+    
+    def fit(self, images=None, p0=None, sigma=None, tol=1E-6, **kwargs):
+        if images is not None:  # reset images and parameters
+            self.images = images
+        if p0 is not None:
+            self.set_params(p0)
+        
+        r0 = self.cost()
+        converged = False
+        while not converged:
+            self.coef = self.bestcoef()
+            self.shifts = self.bestshifts(**kwargs)
+            r1 = self.cost()
+            print("{} {} ".format(r1, (r1 - r0)/r0))
+            if np.abs((r1 - r0)/r0) < tol:
+                converged = True
+            r0 = r1
+
+        perrors = self.paramerrors(sigma=sigma)
+        shifts = self.shifts
+
+        return shifts, perrors[:shifts.size].reshape(*shifts.shape)
 
     def evidenceparts(self, sigma=None):
         s = sigma if sigma is not None else self.estimatenoise()
@@ -248,21 +289,21 @@ if __name__=="__main__":
     data = images + sigma * rng.randn(*images.shape)
 
     reg = SuperRegistration(data, 18)
-    #s1, s1s = reg.fit(iprint=1, delta=1E-8)
+    s1, s1s = reg.fit(iprint=0, delta=1E-8)
     
     deglist = np.arange(6, 26)
     evd = []
     ans = []
     ans_sigma = []
-    for d in deglist:
-        reg = SuperRegistration(data, d)
-        s1, s1s = reg.fit(iprint=0, delta=1E-8, itnlim=100)
-        r = reg.res()
-            
-        evd.append(reg.evidenceparts(sigma=sigma))
-        ans.append(s1.squeeze())
-        ans_sigma.append(s1s.squeeze())
-        print("Finished d={} with evd={}".format(d, evd[-1].sum()))
+    #for d in deglist:
+    #    reg = SuperRegistration(data, d)
+    #    s1, s1s = reg.fit(iprint=0, delta=1E-8, itnlim=100)
+    #    r = reg.res()
+    #        
+    #    evd.append(reg.evidenceparts(sigma=sigma))
+    #    ans.append(s1.squeeze())
+    #    ans_sigma.append(s1s.squeeze())
+    #    print("Finished d={} with evd={}".format(d, evd[-1].sum()))
 
     evd = np.array(evd)
     ans = np.array(ans)
