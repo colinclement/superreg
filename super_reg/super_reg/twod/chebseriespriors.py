@@ -21,7 +21,9 @@ class SuperRegistrationPriors(SuperRegistration):
         self.gamma = gamma if gamma is not None else 0.
 
         degs = np.arange(deg+1)
-        self.mplusn = degs[:,None] + degs[None,:]
+        # TODO: consider whether or not there should be a prior on the constant
+        # shift (probably not...)
+        self.mdist = np.hypot(degs[:,None], degs[None,:])
         S = 2 * (len(images)-1)
         M, N = (deg+1)**2+S, images.size
         self.glogp = np.zeros((M-S, M))
@@ -73,7 +75,7 @@ class SuperRegistrationPriors(SuperRegistration):
 class SRGaussianPriors(SuperRegistrationPriors):
     @property
     def gmat(self):
-        return np.sqrt((self.gamma * self.mplusn).ravel())
+        return np.sqrt((self.gamma * self.mdist).ravel())
 
     def logpriors(self, params=None, sigma=None):
         params = params if params is not None else self.params
@@ -94,17 +96,43 @@ class SRGaussianPriors(SuperRegistrationPriors):
         b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
         return solve(A + np.diagflat(self.gmat**2), b).reshape(self.deg+1,-1)
 
+    def paramerrors(self, params=None, sigma=None):
+        sigma = sigma if sigma is not None else self.estimatenoise()
+        j = self.gradposterior(params)
+        jtj = j.T.dot(j)
+        return sigma/np.sqrt(jtj.diagonal())
+
     def evidenceparts(self, sigma=None):
         s = sigma if sigma is not None else self.estimatenoise()
         r = self.res()
+        lp = self.logpriors()
         N = len(self.params)
-        j = self.gradposterior(sigma=s)
-        logdet = 2*np.log(svdvals(j)).sum()
-        jtr = j[:self.images.size].T.dot(r)
-        rcorrection = jtr.T.dot(solve(j.T.dot(j), jtr))/s**2
-        return np.array([-r.dot(r)/s**2, N*np.log(2*np.pi*s**2), -logdet,
-                         rcorrection])/2.
+        j = self.gradposterior(sigma=s)/s**2  # JTJ/s**2 + GTG
+        logdetA = 2*np.log(svdvals(j)).sum()
+        logdetgtg = np.log(self.gmat[1:]**2).sum()  # constant term is zero
+        return np.array([-r.dot(r)/s**2, -lp.dot(lp), -N*np.log(2*np.pi*s**2), 
+                         -logdetA, logdetgtg])/2.
 
+    def n_effective(self, params=None, gamma=None, sigma=None):
+        s = sigma if sigma is not None else self.estimatenoise()
+        g0 = self.gamma
+        if gamma is not None:
+            self.gamma = gamma
+        j = self.gradposterior(params, s)/s**2  # JTJ/s**2 + GTG
+        eigs = svdvals(j)**2
+        self.gamma = g0  # reset just in case
+        return len(self.params) - self.gamma * np.sum(1./eigs)
+
+    def estimategamma(self, params=None, gamma=None, sigma=None):
+        N_eff = self.n_effective(params, gamma, sigma)
+        g0 = self.gamma
+        if gamma is not None:
+            self.gamma = gamma
+        lp = np.sum(self.logpriors(params)**2)/self.gamma
+        self.gamma = g0  # reset just in case
+        return N_eff/(2*lp)
+        
+        
 
 if __name__=="__main__":
     
@@ -122,17 +150,20 @@ if __name__=="__main__":
 
     sigma = 0.025
     data = images + sigma * rng.randn(*images.shape)
+    evdloop = True
 
-    reg = SRGaussianPriors(data, 18, gamma=.1)
-    #s1, s1s = reg.fit(iprint=1, delta=1E-8, maxiter=100)
+    reg = SRGaussianPriors(data, 30, gamma=1)
+    if not evdloop:
+        s1, s1s = reg.fit(iprint=1, delta=1E-8, maxiter=100)
     
-    if False:
-        gammalist = np.logspace(-2., 1.5, num=20)
+    if evdloop:
+        gammalist = np.logspace(.5, 1.5, num=20)
         degree = 30
         evd = []
         costs = []
         ans = []
         ans_sigma = []
+        neffs = []
         for g in gammalist:
             reg = SRGaussianPriors(data, degree, gamma=g)
             s1, s1s = reg.fit(iprint=0, delta=1E-6, itnlim=100)
@@ -140,6 +171,7 @@ if __name__=="__main__":
             nlnprob = r.T.dot(r)/2.
 
             costs.append(nlnprob)
+            neffs.append(reg.n_effective())
             evd.append(reg.evidenceparts(sigma=sigma))
             ans.append(s1.squeeze())
             ans_sigma.append(s1s.squeeze())
