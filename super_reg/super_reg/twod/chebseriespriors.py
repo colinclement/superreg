@@ -21,10 +21,7 @@ class SuperRegistrationPriors(SuperRegistration):
         self.gamma = gamma if gamma is not None else 0.
 
         degs = np.arange(deg+1)
-        # TODO: consider whether or not there should be a prior on the constant
-        # shift (probably not...)
-        #self.mdist = np.hypot(degs[:,None], degs[None,:])
-        self.mdist = degs[:,None] + degs[None,:]
+        self.mdist = 1E-6 + np.hypot(degs[:,None], degs[None,:])
         S = 2 * (len(images)-1)
         M, N = (deg+1)**2+S, images.size
         self.glogp = np.zeros((M-S, M))
@@ -73,29 +70,38 @@ class SuperRegistrationPriors(SuperRegistration):
         self.opt = LM(self.resposterior, self.gradposterior)
 
 
+#TODO:
+#   1. Need proper priors on shifts for calculations with model selection to
+#   work!
+
 class SRGaussianPriors(SuperRegistrationPriors):
     @property
     def gmat(self):
-        return np.sqrt((self.gamma * self.mdist).ravel())
+        L = max(self.images.shape[1:])
+        shiftlp = np.ones(self.shifts.size)/L
+        g = np.sqrt(self.gamma)
+        return g*np.concatenate([shiftlp, np.sqrt(self.mdist.ravel())])
 
     def logpriors(self, params=None, sigma=None):
         params = params if params is not None else self.params
         sigma = 1 if sigma is None else sigma
-        M = 2 * (self.N - 1)
-        return sigma * self.gmat * params[M:]
+        #M = 2 * (self.N - 1)
+        return sigma * self.gmat * params #[M:]
 
     def gradlogpriors(self, params=None, sigma=None):
         params = params if params is not None else self.params
         sigma = 1 if sigma is None else sigma
         S, N = self.shifts.size, self.images.size
-        self.glogp[:, S:] = sigma * np.diagflat(self.gmat)
+        #self.glogp[:, S:] = sigma * np.diagflat(self.gmat)
+        self.glogp = sigma * np.diagflat(self.gmat)
         return self.glogp
 
     def bestcoef(self):
         tmats = [self.tmatrix(s) for s in self.shiftiter]
         A = np.sum([t.T.dot(t) for t in tmats], 0)
         b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
-        return solve(A + np.diagflat(self.gmat**2), b).reshape(self.deg+1,-1)
+        gmat = self.gmat[2 * (self.N - 1):]
+        return solve(A + np.diagflat(gmat**2), b).reshape(self.deg+1,-1)
 
     def paramerrors(self, params=None, sigma=None):
         sigma = sigma if sigma is not None else self.estimatenoise()
@@ -110,7 +116,7 @@ class SRGaussianPriors(SuperRegistrationPriors):
         N = len(self.params)
         j = self.gradposterior(sigma=s)/s**2  # JTJ/s**2 + GTG
         logdetA = 2*np.log(svdvals(j)).sum()
-        logdetgtg = np.log(self.gmat[1:]**2).sum()  # constant term is zero
+        logdetgtg = np.log(self.gmat**2).sum()  # constant term is zero
         return np.array([-r.dot(r)/s**2, -lp.dot(lp), -N*np.log(2*np.pi*s**2), 
                          -logdetA, logdetgtg])/2.
 
@@ -119,22 +125,22 @@ class SRGaussianPriors(SuperRegistrationPriors):
 
     def n_effective(self, params=None, gamma=None, sigma=None):
         s = sigma if sigma is not None else self.estimatenoise()
-        g0 = self.gamma
-        if gamma is not None:
-            self.gamma = gamma
-        j = self.gradposterior(params, s)/s**2  # JTJ/s**2 + GTG
-        eigs = svdvals(j)**2
-        self.gamma = g0  # reset just in case
-        return len(self.params) - self.gamma * np.sum(1./eigs)
+        gamma = gamma if gamma is not None else self.gamma
+        #j = self.gradposterior(params, s)/s**2  # JTJ/s**2 + GTG
+        j = self.grad(params)
+        g = self.gmat/np.sqrt(self.gamma)
+        #eigs = svdvals(j/g)**2
+        jginv = j/g
+        A = jginv.T.dot(jginv) + gamma * np.eye(j.shape[1])
+        eigs = np.linalg.eigvalsh(A)
+        return len(self.params) - gamma * np.sum(1./eigs)
 
     def estimategamma(self, params=None, gamma=None, sigma=None):
         N_eff = self.n_effective(params, gamma, sigma)
-        g0 = self.gamma
-        if gamma is not None:
-            self.gamma = gamma
-        lp = np.sum(self.logpriors(params)**2)/self.gamma
-        self.gamma = g0  # reset just in case
-        return N_eff/(2*lp)
+        params = params if params is not None else self.params
+        gamma = gamma if gamma is not None else self.gamma
+        w = params * self.gmat
+        return N_eff/(2*w.dot(w)/gamma)
         
         
 
@@ -182,7 +188,7 @@ if __name__=="__main__":
             evd.append(reg.evidenceparts(sigma=sigma))
             ans.append(s1.squeeze())
             ans_sigma.append(s1s.squeeze())
-            print("Finished g={} with evd={}".format(g, evd[-1].sum()))
+            print("Finished g={:.2f} with evd={:.1f}".format(g, evd[-1].sum()))
 
         evd = np.array(evd)
         ans = np.array(ans)
