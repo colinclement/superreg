@@ -6,6 +6,7 @@ from itertools import chain
 from matplotlib.pyplot import *
 from numpy.polynomial.chebyshev import chebval, chebval2d
 from scipy.linalg import svdvals, solve
+from scipy.optimize import fminbound
 
 from super_reg.util.leastsq import LM
 import super_reg.util.makedata as md
@@ -22,6 +23,8 @@ class SuperRegistrationPriors(SuperRegistration):
 
         degs = np.arange(deg+1)
         self.mdist = 1E-6 + np.hypot(degs[:,None], degs[None,:])
+        #degs = 0.5 * (np.arange(deg+1) > 0)
+        #self.mdist = 1E-6 + (degs[:,None] + degs[None,:])
         S = 2 * (len(images)-1)
         M, N = (deg+1)**2+S, images.size
         self.glogp = np.zeros((M-S, M))
@@ -70,29 +73,23 @@ class SuperRegistrationPriors(SuperRegistration):
         self.opt = LM(self.resposterior, self.gradposterior)
 
 
-#TODO:
-#   1. Need proper priors on shifts for calculations with model selection to
-#   work!
-
 class SRGaussianPriors(SuperRegistrationPriors):
     @property
     def gmat(self):
         L = max(self.images.shape[1:])
-        shiftlp = np.ones(self.shifts.size)/L
+        shiftlp = np.ones(self.shifts.size)/(4*L)
         g = np.sqrt(self.gamma)
         return g*np.concatenate([shiftlp, np.sqrt(self.mdist.ravel())])
 
     def logpriors(self, params=None, sigma=None):
         params = params if params is not None else self.params
         sigma = 1 if sigma is None else sigma
-        #M = 2 * (self.N - 1)
-        return sigma * self.gmat * params #[M:]
+        return sigma * self.gmat * params
 
     def gradlogpriors(self, params=None, sigma=None):
         params = params if params is not None else self.params
         sigma = 1 if sigma is None else sigma
         S, N = self.shifts.size, self.images.size
-        #self.glogp[:, S:] = sigma * np.diagflat(self.gmat)
         self.glogp = sigma * np.diagflat(self.gmat)
         return self.glogp
 
@@ -116,32 +113,30 @@ class SRGaussianPriors(SuperRegistrationPriors):
         N = len(self.params)
         j = self.gradposterior(sigma=s)/s**2  # JTJ/s**2 + GTG
         logdetA = 2*np.log(svdvals(j)).sum()
-        logdetgtg = np.log(self.gmat**2).sum()  # constant term is zero
+        logdetgtg = np.log(self.gmat**2).sum()
         return np.array([-r.dot(r)/s**2, -lp.dot(lp), -N*np.log(2*np.pi*s**2), 
                          -logdetA, logdetgtg])/2.
 
+    def optevidence(self, sigma=None, **kwargs):
+        sigma = sigma if sigma is not None else self.estimatenoise()
+        iprint = kwargs.pop('iprint', 0)
+        delta = kwargs.pop('delta', 1E-4)
+        tol = kwargs.pop('tol', 1E-2)
+        #brack = kwargs.pop('brack', (1E-2, 100))
+        bound = kwargs.pop('bound', (0., 1000))
+        p0 = self.params
+        def minusevd(gamma):
+            self.gamma = gamma
+            if iprint:
+                print("\tgamma={}".format(gamma))
+            self.set_params(p0.copy())
+            self.fit(iprint=iprint, delta=delta)
+            return -self.evidence(sigma)
+        return fminbound(minusevd, bound[0], bound[1], xtol=tol, **kwargs)
+
     def cost(self, params=None):
         return np.sum(self.resposterior(params)**2)/2.
-
-    def n_effective(self, params=None, gamma=None, sigma=None):
-        s = sigma if sigma is not None else self.estimatenoise()
-        gamma = gamma if gamma is not None else self.gamma
-        #j = self.gradposterior(params, s)/s**2  # JTJ/s**2 + GTG
-        j = self.grad(params)
-        g = self.gmat/np.sqrt(self.gamma)
-        #eigs = svdvals(j/g)**2
-        jginv = j/g
-        A = jginv.T.dot(jginv) + gamma * np.eye(j.shape[1])
-        eigs = np.linalg.eigvalsh(A)
-        return len(self.params) - gamma * np.sum(1./eigs)
-
-    def estimategamma(self, params=None, gamma=None, sigma=None):
-        N_eff = self.n_effective(params, gamma, sigma)
-        params = params if params is not None else self.params
-        gamma = gamma if gamma is not None else self.gamma
-        w = params * self.gmat
-        return N_eff/(2*w.dot(w)/gamma)
-        
+       
         
 
 if __name__=="__main__":
@@ -150,7 +145,7 @@ if __name__=="__main__":
     import super_reg.twod.fourierseries as fs
     import matplotlib.pyplot as plt
 
-    deg = 8
+    degree = 20
     L = 32
     img = md.powerlaw((2*L, 2*L), 1.8, scale=2*L/6., rng=rng)
     shifts = rng.randn(2)
@@ -158,38 +153,37 @@ if __name__=="__main__":
                          mirror=False)
     images /= images.ptp()
 
-    sigma = 0.025
+    sigma = 0.05
     data = images + sigma * rng.randn(*images.shape)
     evdloop = True
 
-    reg = SRGaussianPriors(data, 30, gamma=1)
+    reg = SRGaussianPriors(data, degree, gamma=1)
     p = reg.params.copy()
     if not evdloop:
         s1, s1s = reg.fit(iprint=1, delta=1E-8, maxiter=100)
-        #reg.set_params(p)
+        reg.set_params(p)
         #s1i, s1si = reg.itnfit(iprint=0, delta=1E-8, maxiter=100)
     
     if evdloop:
-        gammalist = np.logspace(.5, 1.2, num=20)
-        degree = 20
+        gammalist = np.logspace(.2, 1.5, num=10)
+        deglist = np.arange(5, 15)
         evd = []
+        bestgammas = []
         costs = []
         ans = []
-        ans_sigma = []
-        neffs = []
-        for g in gammalist:
-            reg = SRGaussianPriors(data, degree, gamma=g)
-            s1, s1s = reg.fit(iprint=0, delta=1E-6, itnlim=100)
+        for d in deglist:
+            reg = SRGaussianPriors(data, d, gamma=1.)
+            bestgamma = reg.optevidence(sigma, iprint=0, tol=1E-3, delta=1E-5,)
             r = reg.res()
             nlnprob = r.T.dot(r)/2.
 
             costs.append(nlnprob)
-            neffs.append(reg.n_effective())
             evd.append(reg.evidenceparts(sigma=sigma))
-            ans.append(s1.squeeze())
-            ans_sigma.append(s1s.squeeze())
-            print("Finished g={:.2f} with evd={:.1f}".format(g, evd[-1].sum()))
+            bestgammas.append(bestgamma)
+            ans.append(reg.shifts.squeeze())
+            print("Finished d={} evd={:.1f}, g={:.2f}".format(d, evd[-1].sum(),
+                                                              bestgamma))
 
         evd = np.array(evd)
+        bestgammas = np.array(bestgammas)
         ans = np.array(ans)
-        ans_sigma = np.array(ans_sigma)
