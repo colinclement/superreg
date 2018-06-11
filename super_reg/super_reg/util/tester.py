@@ -35,7 +35,9 @@ class BiasTest(object):
     def repeat(self, noise, **kwargs):
         p1s, p1_sigmas = [], []
         for i in range(self.N):
-            p1, p1_sigma = self.reg.fit(self.getdata(noise), **kwargs)
+            data = self.getdata(noise)
+            #self.makereg(data, **self._regkwargs)
+            p1, p1_sigma = self.reg.fit(data, **kwargs)
             p1s += [p1]
             p1_sigmas += [p1_sigma]
         return p1s, p1_sigmas
