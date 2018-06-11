@@ -3,7 +3,7 @@ import numpy as np
 import numexpr as ne
 from itertools import chain
 
-from matplotlib.pyplot import *
+import matplotlib.pyplot as plt
 from numpy.polynomial.chebyshev import chebval, chebval2d
 from scipy.linalg import svdvals, solve
 
@@ -45,11 +45,18 @@ class SuperRegistration(object):
         self.y = 1. * np.arange(self.shape[0])
         self.yg, self.xg = np.meshgrid(self.y, self.x, indexing='ij')
 
-        if self.shifts is None:
-            self.shifts = np.array([self.firstguess(self.images[0], i) for i in
-                                    self.images[1:]])
+        #if self.shifts is None:
+        #    self.shifts = np.array([self.firstguess(self.images[0], i) for i in
+        #                            self.images[1:]])
 
+        #self.coef = self.bestcoef()
+        self.firststep()
+
+    def firststep(self):
+        self.shifts = np.array([self.firstguess(self.images[0], i) for i in
+                           self.images[1:]])
         self.coef = self.bestcoef()
+        return np.concatenate([self.shifts.ravel(), self.coef.ravel()])
 
     def domain(self, shifts=None):
         """   Smallest rectangle containing all shifted images  """
@@ -222,7 +229,7 @@ class SuperRegistration(object):
     def fit(self, images=None, p0=None, sigma=None, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
-        p0 = p0 if p0 is not None else self.params
+        p0 = p0 if p0 is not None else self.firststep()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.setoptimizer()
@@ -272,7 +279,37 @@ class SuperRegistration(object):
     def evidence(self, sigma=None):
         return self.evidenceparts(sigma).sum()
 
+    def show(self, n=2):
+        fig, axes = plt.subplots(4, n)
+        for i in range(n):
+            axes[0,i].matshow(self.images[i])
+            axes[1,i].matshow(self.model[i])
+            axes[2,i].matshow(self.r[i])
+            axes[3,i].matshow(self.r_k[i])
+        for a in axes.flat:
+            a.axis('off')
+        plt.show()
 
+
+def optcomplexity(data, sigma,  **kwargs):
+    d0 = kwargs.pop('d0', 5)
+    show = kwargs.pop('show', False)
+    reg = SuperRegistration(data, d0)
+    reg.fit(sigma=sigma, **kwargs)
+    e0 = reg.evidence(sigma)
+    converged = False
+    while not converged:
+        if show:
+            print("d={}, evd={}".format(d0, e0))
+        reg = SuperRegistration(data, d0+1)
+        e1 = reg.evidence(sigma)
+        if e1 < e0:  # if evidence decreases with increasing complexity
+            converged = True
+        else:
+            d0 += 1
+            e0 = e1
+    return d0
+ 
 if __name__=="__main__":
     
     from scipy.misc import face
