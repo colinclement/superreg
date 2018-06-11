@@ -77,7 +77,7 @@ class SRGaussianPriors(SuperRegistrationPriors):
     @property
     def gmat(self):
         L = max(self.images.shape[1:])
-        shiftlp = np.ones(self.shifts.size)/(4*L)
+        shiftlp = np.ones(self.shifts.size)/(10*L)
         g = np.sqrt(self.gamma)
         return g*np.concatenate([shiftlp, np.sqrt(self.mdist.ravel())])
 
@@ -106,6 +106,9 @@ class SRGaussianPriors(SuperRegistrationPriors):
         jtj = j.T.dot(j)
         return sigma/np.sqrt(jtj.diagonal())
 
+    def cost(self, params=None):
+        return np.sum(self.resposterior(params)**2)/2.
+
     def evidenceparts(self, sigma=None):
         s = sigma if sigma is not None else self.estimatenoise()
         r = self.res()
@@ -122,7 +125,6 @@ class SRGaussianPriors(SuperRegistrationPriors):
         iprint = kwargs.pop('iprint', 0)
         delta = kwargs.pop('delta', 1E-4)
         tol = kwargs.pop('tol', 1E-2)
-        #brack = kwargs.pop('brack', (1E-2, 100))
         bound = kwargs.pop('bound', (0., 1000))
         p0 = self.params
         def minusevd(gamma):
@@ -134,8 +136,27 @@ class SRGaussianPriors(SuperRegistrationPriors):
             return -self.evidence(sigma)
         return fminbound(minusevd, bound[0], bound[1], xtol=tol, **kwargs)
 
-    def cost(self, params=None):
-        return np.sum(self.resposterior(params)**2)/2.
+
+def optcomplexity(data, registration, sigma=None, gamma=None, **kwargs):
+    d0 = kwargs.pop('d0', 5)
+    g0 = gamma if gamma is not None else kwargs.pop('g0', 1.)
+    show = kwargs.pop('show', False)
+    reg = registration(data, d0, gamma=g0)
+    g0 = reg.optevidence(sigma, **kwargs)
+    e0 = reg.evidenceparts(sigma).sum()
+    converged = False
+    while not converged:
+        if show:
+            print("d={}, evd={}, g={}".format(d0, e0, g0))
+        reg = registration(data, d0+1, gamma=g0)
+        g1 = gamma if gamma is not None else reg.optevidence(sigma, **kwargs)
+        e1 = reg.evidenceparts(sigma).sum()
+        if e1 < e0:  # if evidence decreases with increasing complexity
+            converged = True
+        else:
+            d0 += 1
+            g0, e0 = g1, e1
+    return d0, g0
        
         
 
@@ -155,13 +176,14 @@ if __name__=="__main__":
 
     sigma = 0.05
     data = images + sigma * rng.randn(*images.shape)
-    evdloop = True
+    evdloop = False
 
     reg = SRGaussianPriors(data, degree, gamma=1)
     p = reg.params.copy()
     if not evdloop:
-        s1, s1s = reg.fit(iprint=1, delta=1E-8, maxiter=100)
-        reg.set_params(p)
+        pass
+        #s1, s1s = reg.fit(iprint=1, delta=1E-8, maxiter=100)
+        #reg.set_params(p)
         #s1i, s1si = reg.itnfit(iprint=0, delta=1E-8, maxiter=100)
     
     if evdloop:
