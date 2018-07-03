@@ -10,7 +10,7 @@ which most matches two images by finding an optimal shift to match the two.
 
 import numpy as np
 try:
-    from fftw import FFT
+    from super_reg.util.fftw import FFT
     hasfftw = True
 except ImportError as ierr:
     print("Install pyfftw for 20x speedup")
@@ -31,7 +31,7 @@ class Register(object):
     infer delta we want to solve the following optimization problem:
         delta^* = min_delta 1/2 ||I0 - T_delta(I1)||^2
     """
-    def __init__(self, imag1, imag0, **kwargs):
+    def __init__(self, images, **kwargs):
         """
         Find the vector [dy, dx] which translates imag1 to match imag0.
 
@@ -47,16 +47,17 @@ class Register(object):
             reg = Register(imag1, imag0)
             delta, delta_sigma, msg = reg.minimize()
         """
-        assert imag0.shape == imag1.shape, "Images must share their shape"
-        self.imag0 = imag0
-        self.imag1 = imag1
+        self.images = images
+        self.imag0, self.imag1 = images
+        assert self.imag0.shape == self.imag1.shape, "Images must share their shape"
         self.masktype = kwargs.get("masktype", "linear")
         self._maskdict = {'linear': self._linear_interp_mask,
                           'constant': self._constant_region_mask,
-                          'sigmoid': self._sigmoid_mask}
+                          'sigmoid': self._sigmoid_mask,
+                          'none': self._nomask}
         self.mask_kwargs = kwargs.get('mask_kwargs', [{}, {}])
 
-        self.Ly, self.Lx = imag0.shape
+        self.Ly, self.Lx = self.imag0.shape
         self._h = kwargs.get("h", 1E-7)
         self._mirror = kwargs.get("mirror", True)
         self._dy = np.array([self._h, 0.])
@@ -71,8 +72,8 @@ class Register(object):
         self.kx2 = np.fft.rfftfreq(2*self.Lx, d=1./(2*np.pi))
 
         if hasfftw:
-            self.FFT = FFT(imag0.shape, **kwargs)
-            self.FFT2 = FFT(2*np.array(imag0.shape), **kwargs)
+            self.FFT = FFT(self.imag0.shape, **kwargs)
+            self.FFT2 = FFT(2*np.array(self.imag0.shape), **kwargs)
             self.fft2 = self.FFT.fft2
             self.ifft2 = self.FFT.ifft2
             self.fft22 = self.FFT2.fft2
@@ -82,12 +83,12 @@ class Register(object):
             self.ifft2 = np.fft.irfft2
             self.fft22 = np.fft.rfft2
             self.ifft22 = np.fft.irfft2
+        
+        self.initialize(images)
 
-        self.initialize(imag1)
-
-    def initialize(self, imag):
-        self.imag1_k = self.fft2(imag)
-        self.imag1_mirror = self.mirrorpad(imag)
+    def initialize(self, images):
+        self.imag1_k = self.fft2(self.imag1)
+        self.imag1_mirror = self.mirrorpad(self.imag1)
         self.imag1_mirror_k = self.fft22(self.imag1_mirror)
 
     def mirrorpad(self, imag):
@@ -143,6 +144,9 @@ class Register(object):
         mask = np.zeros_like(x)
         mask[o:o+l] = 1.
         return mask
+
+    def _nomask(self, x, d, **kwargs):
+        return np.ones_like(x)
     
     def getmask(self, delta, **kwargs):
         mask = self._maskdict[self.masktype]
@@ -241,8 +245,7 @@ class Register(object):
         cost = self.cost(delta_bestfit, imag1, imag0)
         return np.sqrt(2*cost)
 
-    def minimize(self, delta0=None, imag1=None, imag0=None, method="Nelder-Mead",
-                 **kwargs):
+    def fit(self, images=None, delta0=None, **kwargs):
         """
         Register two images by optimizing translationg of imag1
         inputs:
@@ -261,14 +264,12 @@ class Register(object):
                 optimal delta), str or int (message from optimizer, see specific
                 optimizer for meaning)
         """
-        if imag1 is not None:
-            self.initialize(imag1)
-            self.imag1 = imag1
-        if imag0 is not None:
-            self.imag0 = imag0
-
-        delta0 = delta0 if delta0 is not None else self.firstguess(imag1, imag0)
-        #delta0 += 1E-3 * np.random.randn(2)
+        if images is not None:
+            self.images = images
+            self.imag0, self.imag1 = images
+            self.initialize(images)
+        
+        delta0 = delta0 if delta0 is not None else self.firstguess()
         iprint = kwargs.get("iprint", 0)
 
         if kwargs.get('maskdict'):
@@ -276,6 +277,7 @@ class Register(object):
             self.masktype = maskdict.get('masktype', 'linear')
             self.mask_kwargs = maskdict.get('mask_kwargs', [{}, {}])
 
+        method = kwargs.get('method', 'Nelder-Mead')
         if method == "leastsq":
             if iprint:
                 print("Using method {}".format(method))
@@ -297,8 +299,7 @@ class Register(object):
             p1, jtjdiag = sol['x'], JTJ.diagonal(),
             msg = sol['message']
 
-        imag0 = self.imag0 if imag0 is None else imag0
         mask = self.getmask(p1)
-        sigma = self.estimatenoise(p1, imag1, imag0)
+        sigma = self.estimatenoise(p1)
         p1_sigma = sigma/np.sqrt(jtjdiag*np.sum(mask))
-        return p1, p1_sigma, msg
+        return p1, p1_sigma

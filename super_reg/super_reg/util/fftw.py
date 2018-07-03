@@ -9,10 +9,7 @@ memory and keeps track of wisdom so that continued use of highler
 optimized ffts is only expensive once
 """
 
-try:
-    import cPickle as pickle
-except ImportError as e:
-    import pickle
+import pickle
 import pyfftw
 import os
 
@@ -39,6 +36,7 @@ class FFT(object):
         """
         self.real = real
         self.shape = shape
+        self.n = shape[0]*shape[1]
         self.realshape = (shape[0], shape[1]//2+1)
         self.fftwkwargs = {"threads": kwargs.get("threads", 2),
                            "flags": [kwargs.get("plan", "FFTW_MEASURE")], 
