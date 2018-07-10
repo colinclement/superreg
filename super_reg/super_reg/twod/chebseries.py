@@ -63,8 +63,8 @@ class SuperRegistration(object):
         shifts = shifts if shifts is not None else self.shifts
         ymin, xmin = np.min(shifts, 0)
         ymax, xmax = np.max(shifts, 0)
-        ymin = min(ymin, 0)
-        xmin = min(xmin, 0)
+        ymin = min(ymin, 0) - 1
+        xmin = min(xmin, 0) - 1
         ymax = max(ymax + self.shape[0], self.shape[0]) 
         xmax = max(xmax + self.shape[1], self.shape[1]) 
         return np.array([[ymin, ymax], [xmin, xmax]])
@@ -319,18 +319,18 @@ if __name__=="__main__":
     deg = 8
     L = 32
     img = md.powerlaw((2*L, 2*L), 1.8, scale=2*L/6., rng=rng)
-    shifts = rng.randn(2)
+    shifts = np.array([.15, 0.])  # rng.randn(2)
     images = md.fakedata(0., [shifts], L, img=img, offset=L*np.ones(2),
                          mirror=False)
     images /= images.ptp()
 
-    sigma = 0.025
+    sigma = 0.05
     data = images + sigma * rng.randn(*images.shape)
 
     reg = SuperRegistration(data, 16)
     p = reg.params.copy()
     s1, s1s = reg.fit(p0=p, iprint=0, delta=1E-8)
-    s1i, s1si = reg.itnfit(p0=p, iprint=0, tol=1E-8, delta=1E-8)
+    #s1i, s1si = reg.itnfit(p0=p, iprint=0, tol=1E-8, delta=1E-8)
     
     deglist = np.arange(6, 26)
     evd = []
