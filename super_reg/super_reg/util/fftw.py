@@ -62,6 +62,8 @@ class FFT(object):
             pyfftw.import_wisdom(pickle.load(open(infile, 'rb')))
         except (IOError, TypeError) as e:
             self._savewisdom(infile)
+        except EOFError as e:
+            pass  # file exists but is empty from another FFT being run
 
     def _savewisdom(self, outfile):
         if outfile is None:
