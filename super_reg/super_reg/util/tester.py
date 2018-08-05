@@ -1,4 +1,5 @@
 import numpy as np
+from skimage.measure import block_reduce
 from copy import deepcopy
 import matplotlib as mpl
 mpl.use('Agg')
@@ -23,7 +24,7 @@ class BiasTest(object):
         self.data = md.fakedata(0., **data_kwargs)
 
     def makereg(self, data, *args, **kwargs):
-        self.reg = self.registration(self.data, *args, **kwargs)
+        self.reg = self.registration(data, *args, **kwargs)
 
     def getdata(self, noise):
         noisegen = self.data_kwargs.get('noisegen', np.random.randn)
@@ -42,6 +43,21 @@ class BiasTest(object):
             p1_sigmas += [p1_sigma]
         return p1s, p1_sigmas
 
+    def coarsegrain(self, coarsenings, **kwargs):
+        alldata = []
+        for n in self.noises:
+            ndata = []
+            for i in range(self.N):
+                cdata = []
+                d = self.getdata(n)
+                for cd in [[block_reduce(d[0], (c,c)),
+                            block_reduce(d[1], (c,c))] for c in coarsenings]:
+                    self.makereg(cd, **self._regkwargs)
+                    cdata.append(list(self.reg.fit(cd, **kwargs)))
+                ndata.append(cdata)
+            alldata.append(ndata)
+        return np.array(alldata) 
+
     def repeat_evidence(self, noise, **kwargs):
         p1s, p1_sigmas, evds = [], [], []
         for i in range(self.N):
@@ -53,7 +69,6 @@ class BiasTest(object):
 
     def noiseloop(self, **kwargs):
         alldata = []
-        shifts = self.data_kwargs['shifts']
         for n in self.noises:
             if 'sigma' in kwargs:
                 kwargs['sigma'] = n
