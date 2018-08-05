@@ -65,7 +65,7 @@ def crb(img, sigma, deg=None):
     Ik2 = Ik*Ik.conj()
     return sigma**2/np.sum(ky**2*Ik2).real, sigma**2/np.sum(kx**2*Ik2).real
  
-dirname = "../complexity-N_2000-deglist_62-noise_0.075-2018-04-26"
+dirname = "results/complexity-N_2000-deglist_62-noise_0.075-2018-04-26"
 directory  = os.path.realpath(dirname)
 srcolor = "#007f6f"
 
@@ -94,7 +94,7 @@ mevdline = axe2.axvline(bestdeg, 0,
                         ls=':', zorder=3, alpha=evdalpha)
 axe2.set_ylabel("Negative log evidence ($10^4$)")
 axe2.set_xticks([0, bestdeg, 30., 45., 60.])
-axe2.set_xticklabels(['0', '$k^\star$', '30', '45', '60'])
+axe2.set_xticklabels(['0', '$\lambda^\star$', '30', '45', '60'])
 #axe2.legend(loc='upper right')
 
 errp = axe.scatter(deglist, results['bias_std'], c=srcolor, marker='+',
@@ -105,7 +105,7 @@ merrline = axe.axhline(min(results['bias_std']), 0, bestdeg/60.,
                        c=srcolor, ls=':', zorder=1)
 truecrbline = axe.plot(deglist, np.sqrt(truecrb[:,1]), c=srcolor, ls='dashed',
                        zorder=1)
-axe.set_xlabel("Complexity of image model $k_\mathrm{max}$")
+axe.set_xlabel("Complexity of image model $\lambda$")
 axe.set_ylabel("$\Delta$ error ($\sigma_\Delta$)", labelpad=-20)
 axe.set_xlim([0, 64])
 axe.set_ylim([0., .205])

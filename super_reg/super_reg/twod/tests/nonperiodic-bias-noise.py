@@ -47,13 +47,13 @@ if __name__=="__main__":
     abscissa = np.linspace(0., 2., 20)
     shift = [rng.randn(2)]
     shifts = np.array([[[s, 0.]] for s in abscissa])
-    noise = 0.05
+    noise = 0.075
     noises = np.linspace(5E-3, 0.1, 20)
     xlabel = "True shift $\Delta_y$"
-    N = 1000
+    N = 1500
     L = 32
     padding = 3
-    deg = 13
+    deg = 12
 
     datakwargs = {'L': L, 'offset': np.zeros(2), 'shifts': shift,
                   'img': md.powerlaw((2*L, 2*L), 1.8, scale=L/4., rng=rng),

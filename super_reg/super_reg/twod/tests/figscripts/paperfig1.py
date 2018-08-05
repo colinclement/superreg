@@ -15,7 +15,8 @@ delta = rng.rand(2)*2
 mpl.rcParams['font.size'] = 16.
 mpl.rcParams['axes.labelsize'] = 14.
 mpl.rcParams['axes.titlesize'] = 20.
-mpl.rcParams['legend.fontsize'] = 10
+mpl.rcParams['legend.fontsize'] = 11
+mpl.rcParams['lines.linewidth'] = 1.5
 
 def loadresults(directory):
     files = os.listdir(directory)
@@ -59,10 +60,10 @@ def crb(I, sigma):
     return sigma **2 / np.sum(ky**2 * Ik * Ik.conj()).real
 
 #dirname = os.path.realpath("../N_1000-2018-02-12")
-dirname = os.path.realpath("../N_1000-2018-03-20")
-dirname_sr = os.path.realpath("../N_500-2018-04-07")
+dirname = os.path.realpath("results/N_1000-2018-03-20")
+dirname_sr = os.path.realpath("results/N_500-2018-04-07")
 
-directory = os.path.realpath("../N_1000-deg_13-2018-04-12")
+directory = os.path.realpath("results/N_1000-deg_13-2018-04-12")
 expt = loadresults(directory)
 marg = expt['periodic-shift.pkl']
 superreg = expt['periodic-superreg.pkl']
@@ -82,7 +83,7 @@ demodata = md.fakedata(0.07, shifts=[-demoshift], L=img.shape[0],
 Ly, Lx = img.shape
 packed = np.zeros(np.concatenate([np.array(img.shape)+demoshift, [4]]))
 
-fig, ax = plt.subplots(1, 3, figsize=(10, 4.6))
+fig, ax = plt.subplots(1, 3, figsize=(10.3, 4.3))
 dd = mpl.cm.bone_r(mpl.colors.Normalize()(img))
 dd0 = mpl.cm.bone_r(mpl.colors.Normalize()(demodata[0]))
 dd1 = mpl.cm.bone_r(mpl.colors.Normalize()(demodata[1]))
@@ -102,7 +103,7 @@ ax[0].text(*(demoshift/2. + np.array([5,0])), r"$\mathbf{\Delta}$",
                       edgecolor='none'))
 ax[0].axis('off')
 #ax[0].text(0, Ly+sy+18, "(a)", fontdict={"color": margcolor})
-ax[0].set_title("Marginal ML")
+ax[0].set_title("Standard Fourier Shift")
 
 #==========================================================================
 #  Figure demostrating maximum likelihood
@@ -147,28 +148,39 @@ ax[1].set_title("Super Registration")
 #==========================================================================
 
 merr = ax[2].plot(noises, marg['results']['bias_std'], 'o', c=margcolor,
-                  zorder=1)
-mcrb = ax[2].plot(noises, marg['results']['err'], '-', c=margcolor, zorder=1)
+                  zorder=3)
+#mcrb = ax[2].plot(noises, marg['results']['err'], '-', c=margcolor, zorder=1)
+mcrb = ax[2].fill_between(noises, marg['results']['err'], y2=0.,
+                          color=margcolor, zorder=2, alpha=0.4)
 theory_error = np.array([np.sqrt(predictvariance(img, n)) for n in noises])
-mcalc = ax[2].plot(noises, theory_error, linestyle=':', c='k', zorder=1)
+mcalc = ax[2].plot(noises, theory_error, linestyle=':', c='k', zorder=4)
 
 srerr = ax[2].scatter(noises, superreg['results']['bias_std'], marker='+',
-              c=srcolor, zorder=3)
+              c=srcolor, zorder=4)
 
-srcrb = ax[2].plot(noises, superreg['results']['err'], '-', c=srcolor, zorder=3)
+#srcrb = ax[2].plot(noises, superreg['results']['err'], '-', c=srcolor, zorder=3)
+srcrb = ax[2].fill_between(noises, superreg['results']['err'], y2=0.,
+                           color=srcolor, zorder=1, alpha=0.3)
 
 ax[2].set_xlabel("Noise $\sigma$")
-labels = ("Marginal ML Error", "Marginal ML CRB",
-          "Corrected ML Error", "SR Error",
+labels = ("Fourier Shift (FS) error", "FS CRB",
+          "Theoretical FS error", "Super Registration\n(SR) error",
           "SR CRB")
-lines = (merr[0], mcrb[0], mcalc[0], srerr, srcrb[0])
-ax[2].legend(lines, labels, loc='upper left')
+lines = (merr[0], mcrb, mcalc[0], srerr, srcrb)
+#lines = (merr[0], mcrb[0], mcalc[0], srerr, srcrb[0])
+ax[2].legend(lines, labels, loc='upper left', bbox_to_anchor=(-.01, 1.01))
 ax[2].set_title("$\Delta$ Error Comparison")
+ax[2].set_xlim([0, 0.1])
+ax[2].set_ylim([0, 0.2])
+ax[2].set_xticks([0., 0.025, 0.05, 0.075, 0.1])
+ax[2].set_xticklabels(["0", "0.025", "0.05", "0.075", "0.1"])
+ax[2].set_yticks([0., 0.05, 0.1, 0.15, 0.2])
+ax[2].set_yticklabels(["0", "0.05", "0.1", "0.15", "0.2"])
 
 square(ax[2])
 
 p = list(ax[1].get_position().bounds)
-p[0] -= 0.0225
+p[0] -= 0.015
 ax[1].set_position(p)
 
 plt.show()
