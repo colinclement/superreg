@@ -49,7 +49,7 @@ if __name__=="__main__":
 
     today = datetime.today().isoformat().split("T")[0]
     shift = [rng.randn(2)]
-    noises = np.linspace(5E-3, 0.1, 5)
+    noises = np.linspace(5E-3, 0.1, 20)
     N = 500
     L = 1024
     #coarsenings = range(1,9)  # non-powers of 2 lead to very inaccurate results
@@ -64,7 +64,7 @@ if __name__=="__main__":
     img = datakwargs['img']
     
     tester = BiasTest(datakwargs, N=N, registration=Register,
-                      noises = noises)
+                      noises = noises, plan="FFTW_PATIENT")
 
     # first do a standard noise loop to debug the first step of coarse graining
     #noiseloop = tester.noiseloop()
@@ -74,5 +74,5 @@ if __name__=="__main__":
     print("Finished testing coarse graining in {}".format(datetime.now()-start))
 
     np.savez(saveloc, datakwargs=[datakwargs], noises=noises, 
-             shift=shift, data=data, coarsenings=list(coarsenings),
-             noiseloop=noiseloop)
+             shift=shift, data=data, coarsenings=list(coarsenings), N=N)
+             #noiseloop=noiseloop)
