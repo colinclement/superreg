@@ -31,22 +31,43 @@ shift = dat['shift'].squeeze()
 noises = dat['noises']
 coarsenings = dat['coarsenings']
 
-fig, axe = plt.subplots(1, 2, figsize=(12, 4.8))
+fig, axe = plt.subplots(2, 2, figsize=(12, 10))
 for i, a in enumerate(coarsenings):
-    axe[0].errorbar(noises, data.mean(1)[:,i,0,0]*a - shift[0], 
+    axe[0,0].errorbar(noises, data.mean(1)[:,i,0,0]*a - shift[0], 
                     yerr=data.std(1)[:,i,0,0]*a/np.sqrt(500), 
                     label=str(a))
-axe[0].set_title("Bias and coarsening")
-axe[0].set_xlabel("Noise $\sigma$")
+axe[0, 0].set_title("Bias and coarsening")
+axe[0, 0].set_xlabel("Noise $\sigma$")
+plt.legend()
 
 nn = np.linspace(noises.min(), noises.max(), 100)
 D = roughness(img)
 for i, (a, k) in enumerate(zip(coarsenings, mpl.rcParams['axes.prop_cycle'])):
-    axe[1].plot(noises, data.std(1)[:,i,0,0]*a, 'o', label=str(a), **k)
+    axe[0, 1].plot(noises, data.std(1)[:,i,0,0]*a, 'o', label=str(a), **k)
     pvar = [np.sqrt(theory(D, n/a, (img.shape[0]/a)**2))*a for n in
             nn]
-    axe[1].plot(nn, pvar, ':', label=str(a), **k)
-axe[1].set_yscale('log')
+    axe[0, 1].plot(nn, pvar, ':', label=str(a), **k)
+axe[0, 1].set_yscale('log')
 
 plt.legend()
+
+for i, a in enumerate(coarsenings):
+    axe[1, 0].errorbar(noises, data.mean(1)[:,i,0,1]*a - shift[1], 
+                    yerr=data.std(1)[:,i,0,1]*a/np.sqrt(500), 
+                    label=str(a))
+axe[1, 0].set_title("Bias and coarsening")
+axe[1, 0].set_xlabel("Noise $\sigma$")
+plt.legend()
+
+nn = np.linspace(noises.min(), noises.max(), 100)
+D = roughness(img)
+for i, (a, k) in enumerate(zip(coarsenings, mpl.rcParams['axes.prop_cycle'])):
+    axe[1, 1].plot(noises, data.std(1)[:,i,0,1]*a, 'o', label=str(a), **k)
+    pvar = [np.sqrt(theory(D, n/a, (img.shape[0]/a)**2))*a for n in
+            nn]
+    axe[1,1].plot(nn, pvar, ':', label=str(a), **k)
+axe[1, 1].set_yscale('log')
+
+plt.legend()
+
 plt.show()
