@@ -50,7 +50,7 @@ if __name__=="__main__":
     today = datetime.today().isoformat().split("T")[0]
     shift = [rng.randn(2)]
     noises = np.linspace(5E-3, 0.1, 20)
-    N = 500
+    N = 1000
     L = 1024
     #coarsenings = range(1,9)  # non-powers of 2 lead to very inaccurate results
     coarsenings = [1, 2, 4, 8, 16]
