@@ -5,7 +5,8 @@ from itertools import chain
 
 import matplotlib.pyplot as plt
 from numpy.polynomial.chebyshev import chebval, chebval2d
-from scipy.linalg import svdvals, solve
+from scipy.linalg import svdvals, solve, lstsq
+from scipy.sparse.linalg import cg
 
 from super_reg.util.leastsq import LM
 from super_reg.twod.fouriershift import Register
@@ -17,7 +18,7 @@ rng = np.random.RandomState(14850)
 
 
 class SuperRegistration(object):
-    def __init__(self, images, deg, shifts=None, domain=None):
+    def __init__(self, images, deg, shifts=None, coef=None, domain=None):
         """
         Parameters
         ----------
@@ -45,17 +46,20 @@ class SuperRegistration(object):
         self.y = 1. * np.arange(self.shape[0])
         self.yg, self.xg = np.meshgrid(self.y, self.x, indexing='ij')
 
-        #if self.shifts is None:
-        #    self.shifts = np.array([self.firstguess(self.images[0], i) for i in
-        #                            self.images[1:]])
+        self.firststep(shifts, coef)
 
-        #self.coef = self.bestcoef()
-        self.firststep()
-
-    def firststep(self):
-        self.shifts = np.array([self.firstguess(self.images[0], i) for i in
-                           self.images[1:]])
-        self.coef = self.bestcoef()
+    def firststep(self, shifts=None, coef=None):
+        #self.shifts = np.array([self.firstguess(self.images[0], i) for i in
+        #                   self.images[1:]])
+        self.shifts = shifts
+        if shifts is None:
+            self.shifts = np.array([
+                self.firstguess(i0, i1) for i0, i1 in zip(self.images[:-1], 
+                                                          self.images[1:])
+            ]).cumsum(0)
+        self.coef = coef
+        if coef is None:
+            self.coef = self.bestcoef()
         return np.concatenate([self.shifts.ravel(), self.coef.ravel()])
 
     def domain(self, shifts=None):
@@ -204,7 +208,10 @@ class SuperRegistration(object):
         tmats = [self.tmatrix(s) for s in self.shiftiter]
         A = np.sum([t.T.dot(t) for t in tmats], 0)
         b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
-        return solve(A, b).reshape(self.deg+1,-1)
+        #return solve(A, b).reshape(self.deg+1,-1)
+        #self._firstcoef = lstsq(A, b)
+        self._firstcoef = cg(A, b)
+        return self._firstcoef[0].reshape(self.deg+1,-1)
 
     def bestshifts(self, shifts=None, **kwargs):
         if shifts is not None:
@@ -298,6 +305,7 @@ def optcomplexity(data, sigma,  **kwargs):
     reg.fit(sigma=sigma, **kwargs)
     e0 = reg.evidence(sigma)
     converged = False
+    evdlist = []
     while not converged:
         if show:
             print("d={}, evd={}".format(d0, e0))
