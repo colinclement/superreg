@@ -39,8 +39,11 @@ def collapse(var, D, sigma, N, a):
     return (var/(2*s) - 1) * 6 * a**4 / (N *np.pi**2 * s)
 
 #dat = np.load('results/coarsen-N_500-L_1024-2018-08-06.npz')
-dat = np.load('results/coarsen-N_500-L_1024-2018-08-07.npz')
+#dat = np.load('results/coarsen-N_500-L_1024-2018-08-07.npz')
 #dat = np.load('results/coarsen-N_1000-L_512-2018-08-08.npz')
+dat = np.load('results/coarsen-N_1000-L_1024-2018-08-08.npz')
+#This one has one extra coarse graining and shows bias
+#dat = np.load('results/coarsen-N_400-L_1024-2018-08-09.npz')
 data = dat['data']
 img = dat['datakwargs'][0]['img']
 shift = dat['shift'].squeeze()
@@ -51,39 +54,52 @@ N = dat['N']
 nn = np.linspace(noises.min(), noises.max(), 100)
 Dy, Dx = roughness(img)
 
-if True:
-    fig, axe = plt.subplots(figsize=(5., 3.5))
+if False:
+    fig, axe = plt.subplots(figsize=(5.5, 3.))
     colors = [{'color': c} for c in
               mpl.cm.copper(mpl.colors.Normalize()(np.log(coarsenings)))]
+    lines = []
     for i, (a, k) in enumerate(zip(coarsenings, colors)):
-        axe.plot(noises, data.std(1)[:,i,0,0]**2*a**2, 'o', label=str(a), **k)
         pvar = [theory(Dy, n, img.size,a) for n in nn]
-        axe.plot(nn, pvar, alpha=0.5, **k)
-    legend1 = axe.legend(loc='upper left', title="Block size $a=$")
+        l, = axe.plot(nn, pvar, alpha=0.7, **k)
+        lines.append(l)
+        axe.plot(noises, data.std(1)[:,i,0,0]**2*a**2, 'o', label=str(a), **k)
+    legend1 = axe.legend(loc='upper left', title="Block size $a$")
     axe.add_artist(legend1)
-    l, = axe.plot(nn, 2*nn**2/Dy, '--', c='k', alpha=0.5, label=r"$2\sigma^2/D_y^2$")
-    axe.legend((l,), (r"$2\frac{\sigma^2}{D_y^2}$",), loc='lower right')
+    l, = axe.plot(nn, 2*nn**2/Dy, '--', c='k', alpha=0.8, label=r"$2\sigma^2/D_y^2$")
+    legend2 = axe.legend((l,), (r"$2\frac{\sigma^2}{D_y^2}$",), loc='lower right')
+    axe.add_artist(legend2)
+    legend3 = axe.legend(lines, ('$a={}$'.format(a) for a in coarsenings), loc='center left',
+                         bbox_to_anchor=(1., .5),
+                         title=r"$2\frac{\sigma^2}{D_y^2}\left(1+\frac{N \pi}{6 a^4}\frac{\sigma^2}{D_y^2}\right)$")
 
     axe.set_yscale('log')
     axe.set_xscale('log')
     axe.set_xlabel("Noise $\sigma$")
     axe.set_ylabel("Variance of $\Delta_y$")
-    axe.set_title('Variance after coarsening by $a\\times a$ blocks')
+    axe.set_title('Coarsening can Improve Standard Method')
     ticks = np.logspace(np.log10(noises.min()), np.log10(noises.max()), 5)
     axe.set_xticks(ticks)
     axe.set_xticklabels(['{:.3f}'.format(t) for t in ticks]) 
     axe.set_xlim([noises.min(), noises.max()])
+
     plt.tight_layout()
 
-if False:
+if True:
     fig, axes = plt.subplots(1, len(coarsenings))
-    fakedata = img + np.random.randn(*img.shape)*0.1
+    fakedata = img + np.random.randn(*img.shape)*0.05
     fakeimgs = [block_reduce(fakedata, (a,a)) for a in coarsenings]
     #fmin, fmax = min(map(np.min, fakeimgs)), max(map(np.max, fakeimgs))
     fmin, fmax = None, None
+    Ly, Lx = img.shape
     for i, (a, ax) in enumerate(zip(coarsenings, axes)):
-        ax.matshow(block_reduce(fakedata, (a,a)), vmin=fmin, vmax=fmax)
+        sl = np.s_[-(Ly//a//8):,-(Lx//a//8):]
+        ax.matshow(block_reduce(fakedata, (a,a))[sl], vmin=fmin, vmax=fmax,
+                   cmap='bone')
         ax.axis('off')
+        ax.set_title("$a={}$".format(a), fontsize=12,
+                     verticalalignment='center')
+    axes[0].text(-Lx//48, Ly//16-Ly//48, "$\sigma=0.05$", rotation='vertical')
 
 if False:
     fig, axe = plt.subplots(2, 2, figsize=(14, 10))
