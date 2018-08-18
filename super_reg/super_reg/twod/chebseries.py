@@ -6,7 +6,7 @@ from itertools import chain
 import matplotlib.pyplot as plt
 from numpy.polynomial.chebyshev import chebval, chebval2d
 from scipy.linalg import svdvals, solve, lstsq
-from scipy.sparse.linalg import cg
+from scipy.sparse.linalg import cg, lsmr
 
 from super_reg.util.leastsq import LM
 from super_reg.twod.fouriershift import Register
@@ -18,7 +18,8 @@ rng = np.random.RandomState(14850)
 
 
 class SuperRegistration(object):
-    def __init__(self, images, deg, shifts=None, coef=None, domain=None):
+    def __init__(self, images, deg, shifts=None, coef=None, domain=None,
+                 **kwargs):
         """
         Parameters
         ----------
@@ -39,6 +40,10 @@ class SuperRegistration(object):
         self.deg = deg
         self.images = images
         self.shifts = shifts
+        if shifts is not None:
+            if not shifts.shape == (len(images)-1, 2):
+                raise ValueError("shifts is the incorrect shape")
+
         self.N = len(self.images)
         self.shape = self.images[0].shape
 
@@ -46,9 +51,9 @@ class SuperRegistration(object):
         self.y = 1. * np.arange(self.shape[0])
         self.yg, self.xg = np.meshgrid(self.y, self.x, indexing='ij')
 
-        self.firststep(shifts, coef)
+        self.firststep(shifts, coef, damp=kwargs.get('damp', 1E-5))
 
-    def firststep(self, shifts=None, coef=None):
+    def firststep(self, shifts=None, coef=None, **kwargs):
         #self.shifts = np.array([self.firstguess(self.images[0], i) for i in
         #                   self.images[1:]])
         self.shifts = shifts
@@ -59,7 +64,7 @@ class SuperRegistration(object):
             ]).cumsum(0)
         self.coef = coef
         if coef is None:
-            self.coef = self.bestcoef()
+            self.coef = self.bestcoef(**kwargs)
         return np.concatenate([self.shifts.ravel(), self.coef.ravel()])
 
     def domain(self, shifts=None):
@@ -204,13 +209,14 @@ class SuperRegistration(object):
         reg = Register([imag1, imag0])
         return reg.fit()[0]  # convention is opposite for marginal
 
-    def bestcoef(self):
+    def bestcoef(self, **kwargs):
         tmats = [self.tmatrix(s) for s in self.shiftiter]
         A = np.sum([t.T.dot(t) for t in tmats], 0)
         b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
         #return solve(A, b).reshape(self.deg+1,-1)
         #self._firstcoef = lstsq(A, b)
-        self._firstcoef = cg(A, b)
+        #self._firstcoef = cg(A, b)
+        self._firstcoef = lsmr(A, b, **kwargs)
         return self._firstcoef[0].reshape(self.deg+1,-1)
 
     def bestshifts(self, shifts=None, **kwargs):
@@ -236,7 +242,7 @@ class SuperRegistration(object):
     def fit(self, images=None, p0=None, sigma=None, **kwargs):
         if images is not None:  # reset images and parameters
             self.images = images
-        p0 = p0 if p0 is not None else self.firststep()
+        p0 = p0 if p0 is not None else self.params
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.setoptimizer()
@@ -286,13 +292,16 @@ class SuperRegistration(object):
     def evidence(self, sigma=None):
         return self.evidenceparts(sigma).sum()
 
-    def show(self, n=2):
+    def show(self, n=2, cmap='Greys_r'):
         fig, axes = plt.subplots(4, n)
+        kw = {'vmin' : min(self.images.min(), self.model.min()),
+              'vmax' : max(self.images.max(), self.model.max()),
+              'cmap': cmap}
         for i in range(n):
-            axes[0,i].matshow(self.images[i])
-            axes[1,i].matshow(self.model[i])
+            axes[0,i].matshow(self.images[i], **kw)
+            axes[1,i].matshow(self.model[i], **kw)
             axes[2,i].matshow(self.r[i])
-            axes[3,i].matshow(self.r_k[i])
+            axes[3,i].matshow(self.r_k[i], cmap=cmap)
         for a in axes.flat:
             a.axis('off')
         plt.show()
