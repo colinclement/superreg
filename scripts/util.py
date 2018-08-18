@@ -25,30 +25,44 @@ def shiftallto(stack, shifts):
     slc = np.s_[abs(oy):abs(oy)+Ly, abs(ox):abs(ox)+Lx]
     model = np.zeros((my-oy, mx-ox))
     avmask = np.zeros_like(model)
-    mask = np.zeros((my-oy, mx-ox))
-    mask[slc] = 1.
+    mask = np.zeros_like(model)
+    pad = np.zeros_like(model)
 
-    reg = Register([avmask, avmask])
-    pad = np.zeros((my-oy, mx-ox))
+    mask[slc] = 1.
     pad[slc] = stack[0].copy()
+    reg = Register([pad, pad], masktype='none')
     model += pad
     avmask += mask
     for i, d in enumerate(shifts):
         pad = np.zeros((my-oy, mx-ox))
         pad[slc] = stack[i+1].copy()
-        model += reg.model(d, imag1=pad)
-        avmask += reg.model(d, imag1=mask)
+        model += reg.translate(d, pad)
+        avmask += reg.translate(d, mask)
     model = np.nan_to_num(model/avmask)
     model *= 1*(avmask > 1)
     return model
 
-def firsttry(images, s0list=None):
+def upsample(img, a=1):
+    if a == 1:
+        return img
+    Ly, Lx = img.shape
+    pad = np.zeros((Ly*a, Lx*a), dtype='complex128')
+    img_k = np.fft.fftn(img)
+    ey = Ly//2 - 1 if not a % 2 else (Ly-1)//2
+    ex = Lx//2 - 1 if not a % 2 else (Lx-1)//2
+    pad[:ey,:ex] = img_k[:ey, :ex]
+    pad[:ey,-ex:] = img_k[:ey, -ex:]
+    pad[-ey:,-ex:] = img_k[-ey:, -ex:]
+    pad[-ey:,:ex] = img_k[-ey:, :ex]
+    return np.fft.ifftn(pad).real * a**2
+
+def firsttry(images, s0list=None, **kwargs):
     shifts = []
     if s0list is None:
         s0list = [None for i in range(len(images)-1)]
 
     for i0, i1, s0 in zip(images[:-1], images[1:], s0list):
-        reg = Register([i0, i1])
+        reg = Register([i0, i1], **kwargs)
         s, ps = reg.fit(delta0=s0)
         shifts.append(s) 
     return np.array(shifts).cumsum(0)
@@ -90,8 +104,11 @@ def kompare(data, shift0, shift1, N, sl=None):
 
     vmin = min(kim0.min(), kim1.min())
     vmax = min(kim0.max(), kim1.max())
-    ax[0].matshow(kim0, vmin=vmin, vmax=vmax, cmap='Greys_r')
-    ax[1].matshow(kim1, vmin=vmin, vmax=vmax, cmap='Greys_r')
-    ax[2].matshow(trd(im0, im1))
+    ax[0].matshow(kim0, vmin=vmin, vmax=vmax, cmap='Greys')
+    ax[0].set_title("Reconstruction from Fourier Shifts")
+    ax[1].matshow(kim1, vmin=vmin, vmax=vmax, cmap='Greys')
+    ax[1].set_title("Reconstruction from Super Reg Shifts")
+    ax[2].matshow(kim1-kim0)
+    ax[2].set_title("Difference")
     plt.tight_layout()
 

@@ -8,7 +8,7 @@ import skimage.measure as skm
 from super_reg.twod.chebseries import SuperRegistration
 from super_reg.twod.fouriershift import Register
 
-from util import shiftallto, firsttry
+from util import shiftallto, firsttry, upsample
 
 dataloc = "/home/colin/storage/work/data/superreg/SuperRegData"
 dataset = ("DUP_44_29Mx_70um_30mrad_ss8_tuned_focused_" + 
@@ -57,9 +57,52 @@ fshiftfull = firsttry(datafull)
 #reg = SuperRegistration(data, deg=30)
 #reg.fit(iprint=1, lamb=0.1)
 
+
+if False:
+    dat = np.load("paul-evidence-opt-more-2018-08-17.npz")
+    deglist = dat['deglist']
+    evds = dat['evds']
+    shifts = dat['shifts']
+    coefs = dat['coefs']
+    maxind = np.argmax(evds)
+    data = dat['data']
+    
+    reg = SuperRegistration(data, deglist[maxind], shifts=shifts[maxind][0],
+                            coef=coefs[maxind])
+
+    #frecon = shiftallto(data, fshiftfull)[:-1,:-1]
+    upfactor = 2
+    frecon = upsample(shiftallto(data, fshiftfull)[:-1,:-1], 2)
+    ydom, xdom = reg.domain()
+    y = np.linspace(0, 31, upfactor*data.shape[1])
+    x = np.linspace(0, 31, upfactor*data.shape[1])
+    xg, yg = np.meshgrid(x, y)
+    m = reg(yg, xg)
+    fig, axes = plt.subplots(1, 3, figsize=(13.0, 4.6))
+    vmin = data.min()-sigma  # min(m.min(), frecon.min())
+    vmax = data.max()+sigma  # max(m.max(), frecon.max())
+    axes[0].matshow(m,  #  + sigma*np.random.randn(*m.shape), 
+                    vmin=vmin, vmax=vmax, cmap='Greys')
+    axes[0].axis('off')
+    axes[0].set_title("Super Registration Model (noise added)")
+    axes[1].matshow(frecon, vmin=vmin, vmax=vmax, cmap='Greys')
+    axes[1].axis('off')
+    axes[1].set_title("Data shifted by Fourier Shifts and averaged")
+    axes[2].scatter(reg.shifts[:,1], reg.shifts[:,0], label="Super Registration Shifts")
+    axes[2].scatter(fshiftfull[:,1], fshiftfull[:,0],  label="Fourier Shift Shifts")
+    axes[2].set_title("Inferred Shifts")
+    axes[2].set_xlabel("x-direction (pixels)")
+    axes[2].set_ylabel("y-direction (pixels)")
+    axis = axes[2].axis()
+    axes[2].set_aspect(np.diff(axis[:2])/np.diff(axis[2:]))
+    plt.suptitle("Model using 69x69 Chebyshev polynomials, 64 EMPAD images")
+    plt.legend()
+    plt.show()
+
+
 if True: #__name__=="__main__":
 
-    deglist = range(30, 45)
+    deglist = range(77, 79)
     
     evds = []
     shifts = []
@@ -68,13 +111,13 @@ if True: #__name__=="__main__":
     for i, d in enumerate(deglist):
         print("deg = {}".format(d))
         reg = SuperRegistration(data, d)
-        shifts.append(reg.fit(iprint=0, delta=1E-6, lamb=0.1))
+        shifts.append(reg.fit(iprint=2, delta=1E-2, lamb=0.1))
         evds.append(reg.evidence(sigma=sigma))
         coefs.append(reg.coef)
         print("evd = {}".format(evds[-1]))
     
     today = format(datetime.now()).split()[0]
     
-    np.savez("paul-evidence-opt-{}".format(today),
+    np.savez("paul-evidence-opt-even-more-{}".format(today),
              deglist=np.array(list(deglist)), evds=evds, shifts=shifts,
              coefs=coefs, data=data)
