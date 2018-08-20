@@ -140,19 +140,6 @@ class SuperRegistration(object):
             jac[:,i] = (r0 - r1)/(2 * h)
         return jac
 
-    def tmatrix(self, shift):
-        sy, sx = shift
-        eye = np.identity(self.deg+1)
-        d = self.deg + 1
-        M = d * d
-        T = np.zeros((self.images[0].size, M))
-        for m in range(d):
-            for n in range(d):
-                cy, cx = self.coord(self.y + sy, self.x + sx)
-                T[:, m*d+n] = (chebval(cy, eye[m])[:,None] * 
-                               chebval(cx, eye[n])[None,:]).ravel()
-        return T
-
     def gradcoef(self):
         M = np.prod(self.shape)
         jac = np.zeros((self.N * M, (self.deg+1)**2))
@@ -209,13 +196,28 @@ class SuperRegistration(object):
         reg = Register([imag1, imag0])
         return reg.fit()[0]  # convention is opposite for marginal
 
+    def tmatrix(self, shift):
+        sy, sx = shift
+        eye = np.identity(self.deg+1)
+        d = self.deg + 1
+        M = d * d
+        T = np.zeros((self.images[0].size, M))
+        for m in range(d):
+            for n in range(d):
+                cy, cx = self.coord(self.y + sy, self.x + sx)
+                T[:, m*d+n] = (chebval(cy, eye[m])[:,None] * 
+                               chebval(cx, eye[n])[None,:]).ravel()
+        return T
+
     def bestcoef(self, **kwargs):
-        tmats = [self.tmatrix(s) for s in self.shiftiter]
-        A = np.sum([t.T.dot(t) for t in tmats], 0)
-        b = np.sum([t.T.dot(d.ravel()) for t, d in zip(tmats, self.images)], 0)
-        #return solve(A, b).reshape(self.deg+1,-1)
-        #self._firstcoef = lstsq(A, b)
-        #self._firstcoef = cg(A, b)
+        M = (self.deg + 1)**2
+        A = np.zeros((M, M))
+        b = np.zeros(M)
+        for s, d in zip(self.shiftiter, self.images):
+            t = self.tmatrix(s)
+            A[:,:] += t.T.dot(t)
+            b[:] += t.T.dot(d.ravel())
+
         self._firstcoef = lsmr(A, b, **kwargs)
         return self._firstcoef[0].reshape(self.deg+1,-1)
 
