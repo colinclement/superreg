@@ -59,20 +59,22 @@ fshiftfull = firsttry(datafull)
 
 
 if False:
-    dat = np.load("paul-evidence-opt-more-2018-08-17.npz")
+    #dat = np.load("paul-evidence-opt-more-2018-08-17.npz")
+    #dat = np.load("paul-evidence-opt-even-more-2018-08-18.npz")
+    dat = np.load("paul-evidence-opt-even-more-2018-08-20.npz")
     deglist = dat['deglist']
     evds = dat['evds']
     shifts = dat['shifts']
     coefs = dat['coefs']
-    maxind = np.argmax(evds)
+    maxind = 0 #np.argmax(evds)
     data = dat['data']
     
     reg = SuperRegistration(data, deglist[maxind], shifts=shifts[maxind][0],
                             coef=coefs[maxind])
 
     #frecon = shiftallto(data, fshiftfull)[:-1,:-1]
-    upfactor = 2
-    frecon = upsample(shiftallto(data, fshiftfull)[:-1,:-1], 2)
+    upfactor = 4
+    frecon = upsample(shiftallto(data, fshiftfull)[:-1,:-1], upfactor)
     ydom, xdom = reg.domain()
     y = np.linspace(0, 31, upfactor*data.shape[1])
     x = np.linspace(0, 31, upfactor*data.shape[1])
@@ -81,7 +83,7 @@ if False:
     fig, axes = plt.subplots(1, 3, figsize=(13.0, 4.6))
     vmin = data.min()-sigma  # min(m.min(), frecon.min())
     vmax = data.max()+sigma  # max(m.max(), frecon.max())
-    axes[0].matshow(m,  #  + sigma*np.random.randn(*m.shape), 
+    axes[0].matshow(m + reg.r.std()*np.random.randn(*m.shape), 
                     vmin=vmin, vmax=vmax, cmap='Greys')
     axes[0].axis('off')
     axes[0].set_title("Super Registration Model (noise added)")
@@ -95,14 +97,16 @@ if False:
     axes[2].set_ylabel("y-direction (pixels)")
     axis = axes[2].axis()
     axes[2].set_aspect(np.diff(axis[:2])/np.diff(axis[2:]))
-    plt.suptitle("Model using 69x69 Chebyshev polynomials, 64 EMPAD images")
+    plt.suptitle("Model using {}x{} Chebyshev polynomials, 64 EMPAD images".format(
+        reg.deg, reg.deg
+    ))
     plt.legend()
     plt.show()
 
 
 if True: #__name__=="__main__":
 
-    deglist = range(77, 79)
+    deglist = range(79, 90)
     
     evds = []
     shifts = []
@@ -118,6 +122,6 @@ if True: #__name__=="__main__":
     
     today = format(datetime.now()).split()[0]
     
-    np.savez("paul-evidence-opt-even-more-{}".format(today),
+    np.savez("paul-evidence-opt-{}".format(today),
              deglist=np.array(list(deglist)), evds=evds, shifts=shifts,
              coefs=coefs, data=data)

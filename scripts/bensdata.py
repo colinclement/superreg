@@ -60,7 +60,7 @@ if False:
 
 if True: #__name__=="__main__":
 
-    deglist = range(38, 50)
+    deglist = range(20, 40)
     
     evds = []
     shifts = []
@@ -76,7 +76,7 @@ if True: #__name__=="__main__":
             c0 = None
 
         reg = SuperRegistration(data, d, shifts=s0, coef=c0)
-        shifts.append(reg.fit(iprint=1, delta=1E-6, lamb=0.1))
+        shifts.append(reg.fit(iprint=1, delta=1E-4, lamb=0.1))
         evds.append(reg.evidence(sigma=sigma))
         coefs.append(reg.coef)
         print("evd = {}".format(evds[-1]))
