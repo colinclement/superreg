@@ -72,10 +72,10 @@ class SuperRegistration(object):
         shifts = shifts if shifts is not None else self.shifts
         ymin, xmin = np.min(shifts, 0)
         ymax, xmax = np.max(shifts, 0)
-        ymin = min(ymin, 0) - 1
-        xmin = min(xmin, 0) - 1
-        ymax = max(ymax + self.shape[0], self.shape[0]) 
-        xmax = max(xmax + self.shape[1], self.shape[1]) 
+        ymin = min(ymin, 0)  #  - 1
+        xmin = min(xmin, 0)  #  - 1
+        ymax = max(ymax + self.shape[0], self.shape[0]) - 1
+        xmax = max(xmax + self.shape[1], self.shape[1]) - 1
         return np.array([[ymin, ymax], [xmin, xmax]])
 
     def set_params(self, params):
