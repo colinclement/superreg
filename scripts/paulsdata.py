@@ -8,7 +8,12 @@ import skimage.measure as skm
 from super_reg.twod.chebseries import SuperRegistration
 from super_reg.twod.fouriershift import Register
 
-from util import shiftallto, firsttry, upsample
+from util import shiftallto, firsttry, upsample, reorder
+
+def power(img):
+    imgk = np.fft.fftn(img)
+    imgk[0,0] = 1.
+    return np.fft.fftshift(imgk)
 
 dataloc = "/home/colin/storage/work/data/superreg/SuperRegData"
 dataset = ("DUP_44_29Mx_70um_30mrad_ss8_tuned_focused_" + 
@@ -36,19 +41,24 @@ Cy, Cx = int(mom[1,0]/mom[0,0]), int(mom[0,1]/mom[0,0])
 # Do multi image registration on a small set of k points near the center where
 # theres little aberration
 lky, lkx = 4, 4
-bfslfull = np.s_[:,:,Cy-lky:Cy+lky,Cy-lkx:Cx+lkx]
+s = 4
+#bfslfull = np.s_[:,:,Cy-lky:Cy+lky,Cy-lkx:Cx+lkx]
+bfslfull = np.s_[:,:,Cy-s*lky:Cy+s*lky:s,Cy-s*lkx:Cx+s*lkx:s]
 
+uly, ulx = 40, 70
 ry, rx = 32, 32
-bfsl = np.s_[-ry:,:rx,Cy-lky:Cy+lky,Cy-lkx:Cx+lkx]
+bfsl = np.s_[uly:uly+ry,ulx:ulx+rx,Cy-lky:Cy+lky,Cy-lkx:Cx+lkx]
 
 cutfull = stack[bfslfull]
 cut = stack[bfsl]
 
-data = np.moveaxis(cut.reshape((ry, rx, -1)), -1, 0)
-datafull = np.moveaxis(cutfull.reshape((Ly, Lx, -1)), -1, 0)
+# Reorders the images so they zigzag over the grid of k-points and so each pair
+# in the sequence is 'close' to each other
+data = reorder(np.moveaxis(cut.reshape((ry, rx, -1)), -1, 0), lky+lkx)
+datafull = reorder(np.moveaxis(cutfull.reshape((Ly, Lx, -1)), -1, 0), lky+lkx)
 
 # Estimate noise
-r = Register(datafull[:2])
+r = Register(data[:2])
 sigma = r.estimatenoise(r.fit()[0])
 
 fshift = firsttry(data)
@@ -61,19 +71,21 @@ fshiftfull = firsttry(datafull)
 if False:
     #dat = np.load("paul-evidence-opt-more-2018-08-17.npz")
     #dat = np.load("paul-evidence-opt-even-more-2018-08-18.npz")
-    dat = np.load("paul-evidence-opt-even-more-2018-08-20.npz")
+    #dat = np.load("paul-evidence-opt-even-more-2018-08-20.npz")
+    #dat = np.load("paul-evidence-opt-2018-08-20.npz")
+    dat = np.load("paul-evd-opt-bigger-fov-2018-08-21.npz")
     deglist = dat['deglist']
     evds = dat['evds']
     shifts = dat['shifts']
     coefs = dat['coefs']
-    maxind = 0 #np.argmax(evds)
+    maxind = np.argmax(evds)
     data = dat['data']
     
     reg = SuperRegistration(data, deglist[maxind], shifts=shifts[maxind][0],
                             coef=coefs[maxind])
 
     #frecon = shiftallto(data, fshiftfull)[:-1,:-1]
-    upfactor = 4
+    upfactor = 2
     frecon = upsample(shiftallto(data, fshiftfull)[:-1,:-1], upfactor)
     ydom, xdom = reg.domain()
     y = np.linspace(0, 31, upfactor*data.shape[1])
@@ -83,7 +95,7 @@ if False:
     fig, axes = plt.subplots(1, 3, figsize=(13.0, 4.6))
     vmin = data.min()-sigma  # min(m.min(), frecon.min())
     vmax = data.max()+sigma  # max(m.max(), frecon.max())
-    axes[0].matshow(m + reg.r.std()*np.random.randn(*m.shape), 
+    axes[0].matshow(m, #+ reg.r.std()*np.random.randn(*m.shape), 
                     vmin=vmin, vmax=vmax, cmap='Greys')
     axes[0].axis('off')
     axes[0].set_title("Super Registration Model (noise added)")
@@ -106,7 +118,7 @@ if False:
 
 if True: #__name__=="__main__":
 
-    deglist = range(79, 90)
+    deglist = range(30, 60)
     
     evds = []
     shifts = []
@@ -115,13 +127,13 @@ if True: #__name__=="__main__":
     for i, d in enumerate(deglist):
         print("deg = {}".format(d))
         reg = SuperRegistration(data, d)
-        shifts.append(reg.fit(iprint=2, delta=1E-2, lamb=0.1))
+        shifts.append(reg.fit(iprint=1, delta=1E-4, lamb=0.1))
         evds.append(reg.evidence(sigma=sigma))
         coefs.append(reg.coef)
         print("evd = {}".format(evds[-1]))
     
     today = format(datetime.now()).split()[0]
     
-    np.savez("paul-evidence-opt-{}".format(today),
+    np.savez("paul-evd-opt-bigger-fov-{}".format(today),
              deglist=np.array(list(deglist)), evds=evds, shifts=shifts,
              coefs=coefs, data=data)
