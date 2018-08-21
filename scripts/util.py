@@ -112,3 +112,16 @@ def kompare(data, shift0, shift1, N, sl=None):
     ax[2].set_title("Difference")
     plt.tight_layout()
 
+def reorder(images, L):
+    """
+    Reorders a grid of images so that each image pair in the sequence is a
+    nearest neighbor
+    """
+    for i in range(len(images)//L):
+        if i == 0:
+            output = images[i*L:(i+1)*L]
+        elif i % 2 == 0:
+            output = np.concatenate([output, images[i*L:(i+1)*L]])
+        else:
+            output = np.concatenate([output, images[i*L:(i+1)*L][::-1]])
+    return output
