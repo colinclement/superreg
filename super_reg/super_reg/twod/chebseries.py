@@ -14,7 +14,7 @@ import super_reg.util.makedata as md
 
 DEGREE = 20
 
-rng = np.random.RandomState(14850)
+rng = np.random.RandomState(14850) 
 
 
 class SuperRegistration(object):
@@ -54,8 +54,6 @@ class SuperRegistration(object):
         self.firststep(shifts, coef, damp=kwargs.get('damp', 1E-5))
 
     def firststep(self, shifts=None, coef=None, **kwargs):
-        #self.shifts = np.array([self.firstguess(self.images[0], i) for i in
-        #                   self.images[1:]])
         self.shifts = shifts
         if shifts is None:
             self.shifts = np.array([
@@ -72,10 +70,10 @@ class SuperRegistration(object):
         shifts = shifts if shifts is not None else self.shifts
         ymin, xmin = np.min(shifts, 0)
         ymax, xmax = np.max(shifts, 0)
-        ymin = min(ymin, 0)  #  - 1
-        xmin = min(xmin, 0)  #  - 1
-        ymax = max(ymax + self.shape[0], self.shape[0]) - 1
-        xmax = max(xmax + self.shape[1], self.shape[1]) - 1
+        ymin = min(ymin, 0.)
+        xmin = min(xmin, 0.)
+        ymax = max(ymax + self.shape[0], self.shape[0]) - 1.
+        xmax = max(xmax + self.shape[1], self.shape[1]) - 1.
         return np.array([[ymin, ymax], [xmin, xmax]])
 
     def set_params(self, params):
@@ -104,6 +102,32 @@ class SuperRegistration(object):
         return (2 * (y - dy[0]) / (dy[1] - dy[0]) - 1,
                 2 * (x - dx[0]) / (dx[1] - dx[0]) - 1)
 
+    #def gradcoord(self, y, x, s):
+    #    shifts = self.shifts
+    #    minshifts, maxshifts = np.min(shifts, 0), np.max(shifts, 0)
+    #    Y, X = np.array(self.images.shape[1:]) - 1
+    #    Dy, Dx = np.diff(self.domain(shifts), 1)
+    #    y0p = 1. if sy == minshifts[0] and sy <= 0 else 0.
+    #    y1p = 1. if sy == maxshifts[0] and sy >= Y else 0.
+    #    x0p = 1. if sx == minshifts[1] and sx <= 0 else 0.
+    #    x1p = 1. if sx == maxshifts[1] and sx >= X else 0.
+
+    #    dcoordy = -2 * ((1 + y0p)/Dy + (y - sy - y0p)*(y1p - y0p)/Dy**2)
+    #    dcoordx = -2 * ((1 + x0p)/Dx + (x - sx - x0p)*(x1p - x0p)/Dx**2)
+    #    return dcoordy, dcoordx
+
+    def gradcoord(self, c, s, yorx, shifts=None):
+        shifts = shifts if shifts is not None else self.shifts
+        ss = shifts[:,yorx]
+        minshifts, maxshifts = np.min(ss), np.max(ss)
+        L = self.images.shape[yorx+1] - 1
+        D = np.diff(self.domain(shifts), 1)[yorx]
+        c0p = 1. if s == minshifts and s <= 0 else 0.
+        c1p = 1. if s == maxshifts and s >= L else 0.
+
+        dcoord = -2 * ((1 + c0p)/D + (c - s - c0p)*(c1p - c0p)/D**2)
+        return dcoord
+
     def __call__(self, y, x, shifts=None):
         cy, cx = self.coord(y, x, shifts)
         return chebval2d(cy, cx, self.coef)
@@ -124,6 +148,27 @@ class SuperRegistration(object):
 
         return (self.model - self.images).ravel()
 
+    #def gradshifts2(self, shifts=None, h=1E-6):
+    #    Ly, Lx = self.shape
+    #    shifts = shifts if shifts is not None else self.shifts
+    #    minshifts, maxshifts = np.min(shifts, 0), np.max(shifts, 0)
+
+    #    jac = np.zeros((self.N * np.prod(self.shape), self.shifts.size))
+    #    for i in range(1, len(shifts)+1): 
+    #        s = shifts[i-1]
+    #        for xory in range(2):
+    #            Ckl = self.coef[:,1:].ravel() if xory else self.coef[1:].ravel()
+    #            c = self.x if xory else self.y
+    #            gradcoord = self.gradcoord(c, s[xory], xory, shifts)
+    #            if xory:
+    #                gradimg = self.tmatrix(s, gradx=True).dot(Ckl)
+    #            else:
+    #                gradimg = self.tmatrix(s, grady=True).dot(Ckl)
+    #            bcast = np.s_[None,:] if xory else np.s_[:,None]
+    #            gradimg = gradimg.reshape(Ly, Lx) * gradcoord[bcast]
+    #            jac[:,2*i+xory] = gradimg.ravel()
+    #    return jac
+
     def gradshifts(self, shifts=None, h=1E-6):
         if shifts is not None:
             self.shifts = shifts
@@ -143,14 +188,8 @@ class SuperRegistration(object):
     def gradcoef(self):
         M = np.prod(self.shape)
         jac = np.zeros((self.N * M, (self.deg+1)**2))
-        eye = np.identity(self.deg+1)
-        for i in range(self.deg+1):
-            for j in range(self.deg+1):
-                for k, (sy, sx) in enumerate(self.shiftiter):
-                    cy, cx = self.coord(self.y + sy, self.x + sx)
-                    sl = np.s_[k * M:(k + 1) * M, j + i * (self.deg+1)]
-                    jac[sl] = (chebval(cy, eye[i])[:,None] *
-                               chebval(cx, eye[j])[None,:]).ravel()
+        for k, s in enumerate(self.shiftiter):
+            jac[k*M:(k+1)*M,:] = self.tmatrix(s)
         return np.array(jac)
 
     def grad(self, params=None, h=1E-6):
@@ -196,17 +235,46 @@ class SuperRegistration(object):
         reg = Register([imag1, imag0])
         return reg.fit()[0]  # convention is opposite for marginal
 
-    def tmatrix(self, shift):
+    def tmatrix(self, shift, grady=False, gradx=False):
         sy, sx = shift
-        eye = np.identity(self.deg+1)
-        d = self.deg + 1
-        M = d * d
-        T = np.zeros((self.images[0].size, M))
+        dy = self.deg + 1 if not grady else self.deg
+        dx = self.deg + 1 if not gradx else self.deg
+        T = np.zeros((self.images[0].size, dx*dy))
+        cy, cx = self.coord(self.y + shift[0], self.x + shift[1])
+        Ty0 = np.ones_like(cy)
+        Ty1 = cy if not grady else 2 * cy
+        for m in range(dy):
+            Tx0 = np.ones_like(cx)
+            Tx1 = cx if not gradx else 2 * cx
+            for n in range(dx):
+                if grady and gradx:
+                    T[:, m*dx+n] = (m * Ty0[:,None] * n * Tx0[None,:]).ravel()
+                elif grady:
+                    T[:, m*dx+n] = (m * Ty0[:,None] * Tx0[None,:]).ravel()
+                elif gradx:
+                    T[:, m*dx+n] = (Ty0[:,None] * n * Tx0[None,:]).ravel()
+                else:
+                    T[:, m*dx+n] = (Ty0[:,None] * Tx0[None,:]).ravel()
+                Txn = Tx1
+                Tx1, Tx0 = 2 * cx * Tx1 - Tx0, Txn
+            Tyn = Ty1
+            Ty1, Ty0 = 2 * cy * Ty1 - Ty0, Tyn
+        return T
+
+    def gradtmatrix(self, shift):
+        sy, sx = shift
+        d = self.deg
+        U = np.zeros((self.images[0].size, d*d))
+        cy, cx = self.coord(self.y + shift[0], self.x + shift[1])
+        Uy1, Uy0 = 2 * cy, np.ones_like(cy)
         for m in range(d):
+            Ux1, Ux0 = 2 * cx, np.ones_like(cx)
             for n in range(d):
-                cy, cx = self.coord(self.y + sy, self.x + sx)
-                T[:, m*d+n] = (chebval(cy, eye[m])[:,None] * 
-                               chebval(cx, eye[n])[None,:]).ravel()
+                U[:, m*d+n] = (Uy0[:,None] * Tx0[None,:]).ravel()
+                Uxn = Ux1
+                Ux1, Ux0 = 2 * cx * Ux1 - Ux0, Uxn
+            Uyn = Uy1
+            Uy1, Uy0 = 2 * cy * Uy1 - Uy0, Uyn
         return T
 
     def bestcoef(self, **kwargs):
