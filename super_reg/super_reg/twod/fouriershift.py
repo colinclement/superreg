@@ -56,7 +56,7 @@ class Register(object):
                           'constant': self._constant_region_mask,
                           'sigmoid': self._sigmoid_mask,
                           'none': self._nomask}
-        defaultkwargs = [{'o': 2, 'l': self.Ly-4}, {'o': 2, 'l': self.Ly-4}]
+        defaultkwargs = [{'o': 4, 'l': self.Ly-8}, {'o': 4, 'l': self.Lx-8}]
         self.mask_kwargs = kwargs.get('mask_kwargs', defaultkwargs)
 
         self._h = kwargs.get("h", 1E-7)
