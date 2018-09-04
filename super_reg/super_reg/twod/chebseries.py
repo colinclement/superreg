@@ -188,10 +188,10 @@ class SuperRegistration(object):
     def grad(self, params=None):
         if params is not None:
             self.set_params(params)
-        self._jac = getattr(
-            self, '_jac', np.zeros((self.images.size, self.params.size))
-        )
-        self._jac.fill(0.)
+        if hasattr(self, '_jac'):
+            self._jac.fill(0.)
+        else:
+            self._jac = np.zeros((self.images.size, self.params.size))
         Ns = self.shifts.size
         self.gradshifts(jac=self._jac[:,:Ns])
         self.gradcoef(jac=self._jac[:,Ns:])
