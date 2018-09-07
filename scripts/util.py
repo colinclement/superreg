@@ -1,6 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import skimage.measure as skm
 from super_reg.twod.fouriershift import Register
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+
+def power(img):
+    imgk = np.fft.fftn(img)
+    imgk[0,0] = 1.
+    return np.abs(np.fft.fftshift(imgk))**2
 
 def shiftallto(stack, shifts):
     """
@@ -40,7 +48,7 @@ def shiftallto(stack, shifts):
         avmask += reg.translate(d, mask)
     model = np.nan_to_num(model/avmask)
     model *= 1*(avmask > 1)
-    return model
+    return model[slc]
 
 def upsample(img, a=1):
     if a == 1:
@@ -66,6 +74,14 @@ def firsttry(images, s0list=None, **kwargs):
         s, ps = reg.fit(delta0=s0)
         shifts.append(s) 
     return np.array(shifts).cumsum(0)
+
+def coarsen(stack, a):
+    N, Ly, Lx = stack.shape
+    cy, cx = Ly-Ly%a, Lx-Lx%a
+    return np.array([skm.block_reduce(s[:cy,:cx], (a,a)) for s in stack])
+
+def coarsereg(stack, a, **kwargs):
+    return a * firsttry(coarsen(stack, a), **kwargs)
 
 def bootstrap(images, L=64):
     Ly, Lx = images[0].shape
@@ -128,7 +144,6 @@ def reorder(images, L):
 
 def intshifts(data, shifts, size=64):
     C = data.shape[-1]//2 - size//2
-    #C = shifts.mean(0)
 
     s = shifts.astype('int')
     out = [data[0][C:C+size, C:C+size]]
@@ -138,3 +153,31 @@ def intshifts(data, shifts, size=64):
         y, x = s[i]
         out.append(d[C-y:C-y+size, C-x:C-x+size])
     return np.array(out)
+
+def play(stack, interval=1000, **kwargs):
+    fig, ax = plt.subplots()
+    img = ax.matshow(stack[0], **kwargs)
+
+    def animate(i):
+        ax.set_title("Image {}".format(i))
+        img.set_data(stack[i])
+        return img,
+
+    ani = animation.FuncAnimation(fig, animate, np.arange(len(stack)),
+                                  interval=interval)
+
+    plt.show()
+    return fig, ax, ani
+
+def corr(i0, i1):
+    Ly, Lx = (2*np.array(i0.shape)).astype('int')
+    i0k = np.fft.rfftn(i0, (Ly, Lx)) 
+    i1k = np.fft.rfftn(i1, (Ly, Lx))
+    ones = np.fft.rfftn(np.ones_like(i0), (Ly, Lx))
+    norm = np.fft.irfftn(ones*ones.conj()).real
+    mask = norm==0.
+    norm[mask] = 1.
+    corr = np.fft.irfftn(i0k*i1k.conj()).real/norm
+    corr[mask] = 0.
+    return corr
+
