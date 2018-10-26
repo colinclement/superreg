@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-mpl.rcParams['axes.labelsize'] = 16
-mpl.rcParams['axes.titlesize'] = 16
-mpl.rcParams['legend.fontsize'] =10 
+mpl.rcParams['axes.labelsize'] = 12
+mpl.rcParams['axes.titlesize'] = 12
+mpl.rcParams['legend.fontsize'] = 10 
 mpl.rcParams['xtick.labelsize'] =12 
 mpl.rcParams['ytick.labelsize'] =12 
 mpl.rcParams['lines.linewidth'] = 1.2
@@ -52,7 +52,7 @@ margcolor = "#f3899a"
 srcolor = "#007f6f"
 flw = 0.
 
-fig, axes = plt.subplots(1,2, figsize=(8.5, 2.8), sharey=True)
+fig, axes = plt.subplots(2,1, figsize=(4., 8), ) # sharey=True)
 
 srb = axes[0].errorbar(shifts, srdelta.mean(2)[:,0,0]-shifts, c=srcolor,
                        yerr=srdelta.std(2)[:,0,0]/np.sqrt(srdelta.shape[2]),)
@@ -68,6 +68,8 @@ fse = axes[0].scatter(shifts, fsdelta.std(2)[:,0,0], marker='o', c=margcolor,)
 fscrb = fsdelta.mean(2)[:,1,0]
 fsc = axes[0].fill_between(shifts, fscrb, y2=-fscrb, color=margcolor,
                            alpha=0.3, lw=flw)
+
+axes[0].text(-.4, .48, "(a)", fontsize=14)
 
 #srlegend = axes[0].legend(
 #    (srb[0], sre, src), ('Super registration (SR) bias', 'SR error', 'SR CRB'), 
@@ -99,6 +101,7 @@ fse = axes[1].scatter(noises, fsnoise.std(2)[:,0,0], marker='o', c=margcolor,)
 fscrb = fsnoise.mean(2)[:,1,0]
 fsc = axes[1].fill_between(noises, fscrb, y2=-fscrb, color=margcolor,
                            alpha=0.3, lw=flw)
+axes[1].text(-.01, .48, "(b)", fontsize=14)
               
 
 axes[1].set_xlim([0., noises.max()])
@@ -119,10 +122,10 @@ axes[1].set_title(
 #)
 
 axes[1].legend(
-    (srb[0], sre, src, fsb[0], fse, fstheory[0], fsc),
+    (srb[0], sre, src, fsb[0], fse, fsc, fstheory[0]),
     ('Super registration\n(SR) bias', 'SR error', 'SR CRB', 'Fourier shift bias', 
-     'FS error', 'Theory FS error', 'FS CRB'), 
-    loc='center left', bbox_to_anchor=(1., .5)
+     'FS error', 'FS CRB', 'FS theory error'), rcol=2,
+    loc='lower center', bbox_to_anchor=(.5, -1.)
 )
 
 plt.tight_layout()

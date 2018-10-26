@@ -85,7 +85,7 @@ packed = np.zeros(np.concatenate([np.array(img.shape)+demoshift, [4]]))
 
 fig0, ax0 = plt.subplots(figsize=(4.3, 4.3))
 fig1, ax1 = plt.subplots(figsize=(4.3, 4.3))
-fig2, ax2 = plt.subplots(figsize=(4.3, 4.3))
+fig2, ax2 = plt.subplots(figsize=(4.5, 3.))
 
 dd = mpl.cm.bone_r(mpl.colors.Normalize()(img))
 dd0 = mpl.cm.bone_r(mpl.colors.Normalize()(demodata[0]))
@@ -100,13 +100,15 @@ packed[sy:-sy, sx:-sx,3] = 1
 ax0.imshow(packed)
 ax0.arrow(0,0,*demoshift, width=3, length_includes_head=True, 
           facecolor=margcolor, zorder=2)
+bbox = dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.05',
+            edgecolor='none')
 ax0.text(*(demoshift/2. + np.array([5,0])), r"$\mathbf{\Delta}$",
            fontdict={'fontsize': 20, 'color': margcolor}, zorder=2,
-            bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.05',
-                      edgecolor='none'))
+            bbox=bbox)
 ax0.axis('off')
 #ax[0].text(0, Ly+sy+18, "(a)", fontdict={"color": margcolor})
 ax0.set_title("Standard Fourier Shift")
+ax0.text(sx/8., Ly+7*sy/8, "(a)", bbox=bbox, fontsize=18)
 
 #==========================================================================
 #  Figure demostrating maximum likelihood
@@ -145,6 +147,7 @@ rect = mpl.patches.Rectangle((sy,sx), Lx, Ly, edgecolor='white',
 ax1.add_patch(rect)
 #ax[1].text(0, Ly+sy+18, "(b)", fontdict={"color": srcolor})
 ax1.set_title("Super Registration")
+ax1.text(sx/8, Ly+7*sy/8., "(b)", bbox=bbox, fontsize=18)
 
 #==========================================================================
 #  Figure summarizing errors and bias
@@ -166,21 +169,22 @@ srcrb = ax2.fill_between(noises, superreg['results']['err'], y2=0.,
                            color=srcolor, zorder=1, alpha=0.3)
 
 ax2.set_xlabel("Noise $\sigma$")
-labels = ("Fourier Shift (FS) error", "FS CRB",
-          "Theoretical FS error", "Super Registration\n(SR) error",
+labels = ("Fourier Shift (FS)", "FS CRB",
+          "Theory", "Super Registration (SR)",
           "SR CRB")
 lines = (merr[0], mcrb, mcalc[0], srerr, srcrb)
 #lines = (merr[0], mcrb[0], mcalc[0], srerr, srcrb[0])
 ax2.legend(lines, labels, loc='upper left', bbox_to_anchor=(-.01, 1.01))
-ax2.set_title("$\Delta$ Error Comparison")
+#ax2.set_title("$\Delta$ Error Comparison")
 ax2.set_xlim([0, 0.1])
 ax2.set_ylim([0, 0.2])
 ax2.set_xticks([0., 0.025, 0.05, 0.075, 0.1])
 ax2.set_xticklabels(["0", "0.025", "0.05", "0.075", "0.1"])
 ax2.set_yticks([0., 0.05, 0.1, 0.15, 0.2])
 ax2.set_yticklabels(["0", "0.05", "0.1", "0.15", "0.2"])
+ax2.set_ylabel('$\Delta$ Error (pixels)')
 
-square(ax2)
+#square(ax2)
 plt.tight_layout()
 
 
