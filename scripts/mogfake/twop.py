@@ -3,8 +3,8 @@ from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from super_reg.twod.chebseries import SuperRegistration
-from super_reg.twod.fouriershift import Register
+from superreg.chebseries import SuperRegistration
+from superreg.fouriershift import Register
 import makedata as md
 
 os.sys.path.append('../')

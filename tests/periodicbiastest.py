@@ -14,9 +14,10 @@ import os
 import numpy as np
 from datetime import datetime
 
-from super_reg.util.tester import BiasTest
-import super_reg.util.makedata as md
-from super_reg.twod.fouriershift import Register
+from superreg.util.tester import BiasTest
+import superreg.util.makedata as md
+from superreg.periodicshift import Register
+from superreg.fourierseries import SuperRegistration
 
 rng = np.random.RandomState(148509289)
                                                                       
@@ -43,7 +44,7 @@ def loadresults(directory):
             mask_kwargs = pickle.load(infile)
             alldata = pickle.load(infile)
             shifts = pickle.load(infile)
-            img = pickle.load(img)
+            img = pickle.load(infile)
         data[f] = {'results': res, 'noises': noises,
                    'datakwargs': datakwargs, 'mask_kwargs': mask_kwargs,
                    'alldata': alldata, 'shifts': shifts, 'img': img}
@@ -65,18 +66,16 @@ if __name__=="__main__":
     xlabel = "True shift $\Delta_y$"
     shifts = np.array([[[delta[0], s]] for s in abscissa])
     noises = np.linspace(0, 0.1, 20)
-    noise_scale = .5
-    N = 100
+    N = 1000
+    deg = 13
+    # For this data set 13 maximized the evidence at sigma=.1
 
-    directory = 'results/smoothed{:.2f}-N_{}-'.format(noise_scale,N)+today
+    directory = 'results/N_{}-deg_{}-'.format(N, deg)+today
 
     datakwargs = {
         'random': {'L': L, 'offset': np.zeros(2), 'shifts': [delta],
-                   'img': md.powerlaw((L, L), 1.8, scale=L/4., rng=rng),
-                   'mirror': False,
-                   #'noisegen': lambda x, y, z: 2*np.random.rand(x, y, z)-1, }
-                   'noisegen': md.correlatednoise,
-                   'noiseargs': (noise_scale,)}
+                   'img': md.powerlaw((L, L), 1.8, scale=L/6., rng=rng),
+                   'mirror': False}
         }
     mask_kwargs = {'none': [{}, {}]}
     
@@ -87,18 +86,24 @@ if __name__=="__main__":
     data = 'random'
 
     start = datetime.now()
-    biastest = BiasTest(datakwargs[data], N=N, masktype=mask,
-                        mask_kwargs=mask_kwargs[mask],
-                        registration=Register,
-                        noises = noises, mirror=False)
+    biastest = BiasTest(datakwargs[data], N=N, registration=Register,
+                        noises = noises)
     alldata = biastest.noiseloop(delta0=delta+0.01*np.random.randn(2),)
-    print("Finished noise loop")
-    alldata_delta = biastest.deltaloop(shifts, noises[6]).squeeze()
-    print("Finished shift loop")
+    print("Finished noise loop in {}".format(datetime.now()-start))
     
+    start = datetime.now()
+    biastest_sr = BiasTest(datakwargs[data], N=N,
+                           registration=SuperRegistration,
+                           noises=noises, deg=deg)
+    # Note deg=17 was tested by maximizing evidence in fourierseries.py
+    p0 = biastest_sr.reg.p0.copy()
+    p0 /= np.sqrt(len(p0))
+    alldata_sr = biastest_sr.noiseloop(p0=p0, sigma=0.).squeeze()
+    print("Finished noise loop in {}".format(datetime.now()-start))
+
     results_y = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
     results_x = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
-    for dd, dds in zip(alldata, alldata_delta):
+    for dd in alldata:
         p1s, p1_sigmas = dd
         results_y['bias'] += [np.mean(p1s[:,0])-delta[0]]
         results_y['bias_std'] += [np.std(p1s[:,0])]
@@ -109,34 +114,27 @@ if __name__=="__main__":
         results_x['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
         results_x['err'] += [np.mean(p1_sigmas[:,1])]
         
-    results_deltay = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
-    for dds, d in zip(alldata_delta, shifts.squeeze()):
+    results_superreg = {'bias': [], 'bias_std': [], 'biaserr': [], 'err': []}
+    for dds in alldata_sr:
         p1s, p1_sigmas = dds
-        results_deltay['bias'] += [np.mean(p1s[:,1])-d[1]]
-        results_deltay['bias_std'] += [np.std(p1s[:,1])]
-        results_deltay['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
-        results_deltay['err'] += [np.mean(p1_sigmas[:,1])]
+        results_superreg['bias'] += [-np.mean(p1s[:,1])-delta[1]]
+        # Convention in superreg changes sign of answer
+        results_superreg['bias_std'] += [np.std(p1s[:,1])]
+        results_superreg['biaserr'] += [np.std(p1s[:,1])/np.sqrt(len(p1s))]
+        results_superreg['err'] += [np.mean(p1_sigmas[:,1])]
 
     img = datakwargs[data]['img']
     axes[0].matshow(img, cmap='Greys')
     axes[0].axis('off')
     f, a = biastest.plotbias(results_x, axis=axes[1],
-                           title="{} data with {} mask".format(data,mask))
-    f, a = biastest.plotbias(results_deltay, abscissa=abscissa, xlabel=xlabel, 
-                             axis=axes[2], title="Shift Dependent Bias")
+                             title="{} data with {} mask".format(data,mask))
+    f, a = biastest.plotbias(results_superreg,
+                             axis=axes[2], title="Super Registration")
 
     f.savefig(os.path.join(directory,"summary.pdf".format(data,mask)))
-    filename = os.path.join(directory,"data-{}_mask-{}.pkl".format(data,mask))
-    filename_deltas = os.path.join(directory,
-                                   "shift-data-{}_mask-{}.pkl".format(data,mask))
+    filename = os.path.join( directory,"periodic-shift.pkl")
+    filename_superreg = os.path.join( directory, "periodic-superreg.pkl")
     saveresults(filename, results_x, noises, datakwargs, mask_kwargs,
                 alldata, shifts, img)
-    saveresults(filename_deltas, results_deltay, noises, datakwargs, mask_kwargs,
-                alldata_delta, shifts, img)
-    #with open(filename, 'wb') as outfile:
-    #    pickle.dump(results_y, outfile)
-    #    pickle.dump(biastest.noises, outfile)
-    #    pickle.dump(datakwargs[data], outfile)
-    #    pickle.dump(mask_kwargs[mask], outfile)
-    #    pickle.dump(alldata, outfile)
-    print("finished {}, {} in {}".format(data, mask, datetime.now()-start))
+    saveresults(filename_superreg, results_superreg, noises, datakwargs, 
+                mask_kwargs, alldata_sr, shifts, img)

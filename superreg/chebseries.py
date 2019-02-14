@@ -8,9 +8,9 @@ from numpy.polynomial.chebyshev import chebval, chebval2d
 from scipy.linalg import svdvals, solve, lstsq
 from scipy.sparse.linalg import cg, lsmr
 
-from super_reg.util.leastsq import LM
-from super_reg.twod.fouriershift import Register
-import super_reg.util.makedata as md
+from superreg.util.leastsq import LM
+from superreg.fouriershift import Register
+import superreg.util.makedata as md
 
 DEGREE = 20
 
@@ -379,7 +379,7 @@ def optcomplexity(data, sigma,  **kwargs):
 if __name__=="__main__":
     
     from scipy.misc import face
-    import super_reg.twod.fourierseries as fs
+    import superreg.twod.fourierseries as fs
     import matplotlib.pyplot as plt
 
     deg = 8

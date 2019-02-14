@@ -9,12 +9,12 @@ This module computes the registration error between two periodic noisy images
 
 import numpy as np
 try:
-    from super_reg.util.fftw import FFT
+    from superreg.util.fftw import FFT
     hasfftw = True
 except ImportError as ierr:
     print("Install pyfftw for 20x speedup")
     hasfftw = False
-import super_reg.util.leastsq as leastsq
+import superreg.util.leastsq as leastsq
 from scipy.optimize import minimize
 from scipy.special import expit
 
@@ -194,7 +194,7 @@ class Register(object):
 
 
 if __name__=='__main__':
-    import super_reg.util.makedata as md
+    import superreg.util.makedata as md
     L = 128
     img = md.powerlaw((L, L), 1.8, scale=L/4)
     d = np.random.randn(2)

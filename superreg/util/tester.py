@@ -5,7 +5,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 
-import super_reg.util.makedata as md
+import superreg.util.makedata as md
 
 
 class BiasTest(object):

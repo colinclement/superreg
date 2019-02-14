@@ -8,9 +8,9 @@ from numpy.polynomial.chebyshev import chebval, chebval2d
 from scipy.linalg import svdvals, solve
 from scipy.optimize import fminbound
 
-from super_reg.util.leastsq import LM
-import super_reg.util.makedata as md
-from super_reg.twod.chebseries import SuperRegistration
+from superreg.util.leastsq import LM
+import superreg.util.makedata as md
+from superreg.chebseries import SuperRegistration
 
 DEGREE = 20
 

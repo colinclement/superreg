@@ -10,12 +10,12 @@ which most matches two images by finding an optimal shift to match the two.
 
 import numpy as np
 try:
-    from super_reg.util.fftw import FFT
+    from superreg.util.fftw import FFT
     hasfftw = True
 except ImportError as ierr:
     print("Install pyfftw for 20x speedup")
     hasfftw = False
-import super_reg.util.leastsq as leastsq
+import superreg.util.leastsq as leastsq
 from scipy.optimize import minimize
 from scipy.special import expit
 

@@ -113,8 +113,8 @@ def meanvar(results):
         fsv.append(np.std(fshash, 1)**2)
     return list(map(np.array, (srm, srv, fsm, fsv)))
 
-from super_reg.twod.chebseries import SuperRegistration
-from super_reg.twod.fouriershift import Register
+from superreg.chebseries import SuperRegistration
+from superreg.fouriershift import Register
     
 def paperplot(results=results, model=model, sigmalist=sigmalist, sigma=0.1,
               param=6, N=N, truep=truep, cresults=cresults):

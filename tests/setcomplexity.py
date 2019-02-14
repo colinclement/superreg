@@ -17,11 +17,11 @@ from scipy.misc import face
 import numpy as np
 from itertools import chain
 
-import super_reg.util.tester as tester
-import super_reg.util.makedata as md
+import superreg.util.tester as tester
+import superreg.util.makedata as md
 
-from super_reg.twod.fouriershift import Register
-import super_reg.twod.chebseriespriors as csp
+from superreg.fouriershift import Register
+import superreg.chebseriespriors as csp
 
 rng = np.random.RandomState(148509289)
 

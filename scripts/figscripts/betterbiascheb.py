@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-from super_reg.twod.tests.integerbiastest_cheb import loadresults
-from super_reg.util.tester import BiasTest
-from super_reg.twod.chebseries import SuperRegistration
+from superreg.tests.integerbiastest_cheb import loadresults
+from superreg.util.tester import BiasTest
+from superreg.chebseries import SuperRegistration
 
 mpl.rcParams['font.size'] = 16.
 mpl.rcParams['axes.labelsize'] = 20.

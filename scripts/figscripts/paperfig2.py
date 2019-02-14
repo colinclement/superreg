@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from scipy.signal import wiener
 
-from super_reg.twod.fouriershift import Register
-from super_reg.util.tester import BiasTest
-import super_reg.util.makedata as md
+from superreg.fouriershift import Register
+from superreg.util.tester import BiasTest
+import superreg.util.makedata as md
 
 rng = np.random.RandomState(148509289)
 delta = rng.rand(2)*2

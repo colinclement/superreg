@@ -1,7 +1,7 @@
 import numpy as np
 
-import super_reg.twod.fourierseries as fs
-from super_reg.twod.chebseries import SuperRegistration
+import superreg.fourierseries as fs
+from superreg.chebseries import SuperRegistration
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl

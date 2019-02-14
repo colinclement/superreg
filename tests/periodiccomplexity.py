@@ -14,10 +14,10 @@ import os
 import numpy as np
 from datetime import datetime
 
-from super_reg.util.tester import BiasTest
-import super_reg.util.makedata as md
-from super_reg.twod.periodicshift import Register
-from super_reg.twod.fourierseries import SuperRegistration
+from superreg.util.tester import BiasTest
+import superreg.util.makedata as md
+from superreg.periodicshift import Register
+from superreg.fourierseries import SuperRegistration
 
 rng = np.random.RandomState(148509289)
                                                                       

@@ -4,12 +4,12 @@ import os
 def read(fname):
         return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
-setup(name='super_reg',
+setup(name='superreg',
       version='0.0.1',
       description='Super resolution image registration',
       long_description=read('README.md'),
       keywords='inference registration image super-resolution',
-      url='gligible.lassp.cornell.edu/colin/reg-super-res',
+      url='',
       author='Colin Clement',
       author_email='colin.clement@gmail.com',
       license='GPLv3',

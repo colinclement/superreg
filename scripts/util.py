@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import skimage.measure as skm
-from super_reg.twod.fouriershift import Register
+from superreg.fouriershift import Register
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 

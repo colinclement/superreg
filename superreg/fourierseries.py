@@ -7,8 +7,8 @@ from scipy.optimize import golden, leastsq
 from scipy.ndimage import gaussian_filter
 from numpy.linalg import slogdet
 
-from super_reg.util.leastsq import LM
-import super_reg.util.makedata as md
+from superreg.util.leastsq import LM
+import superreg.util.makedata as md
 
 DEGREE = 20
 
