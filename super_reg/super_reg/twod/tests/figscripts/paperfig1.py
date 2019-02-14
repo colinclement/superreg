@@ -13,8 +13,8 @@ rng = np.random.RandomState(148509289)
 delta = rng.rand(2)*2
 
 mpl.rcParams['font.size'] = 16.
-mpl.rcParams['axes.labelsize'] = 14.
-mpl.rcParams['axes.titlesize'] = 20.
+mpl.rcParams['axes.labelsize'] = 16
+mpl.rcParams['axes.titlesize'] = 16
 mpl.rcParams['legend.fontsize'] = 11
 mpl.rcParams['lines.linewidth'] = 1.5
 
@@ -60,8 +60,8 @@ def crb(I, sigma):
     return sigma **2 / np.sum(ky**2 * Ik * Ik.conj()).real
 
 #dirname = os.path.realpath("../N_1000-2018-02-12")
-dirname = os.path.realpath("results/N_1000-2018-03-20")
-dirname_sr = os.path.realpath("results/N_500-2018-04-07")
+#dirname = os.path.realpath("results/N_1000-2018-03-20")
+#dirname_sr = os.path.realpath("results/N_500-2018-04-07")
 
 directory = os.path.realpath("results/N_1000-deg_13-2018-04-12")
 expt = loadresults(directory)
@@ -141,7 +141,7 @@ rect = mpl.patches.Rectangle((sy,sx), Lx, Ly, edgecolor='white',
                              linewidth=2, zorder=2)
 ax[1].add_patch(rect)
 #ax[1].text(0, Ly+sy+18, "(b)", fontdict={"color": srcolor})
-ax[1].set_title("Super Registration")
+ax[1].set_title("Super Registration (SR)")
 
 #==========================================================================
 #  Figure summarizing errors and bias
@@ -164,7 +164,7 @@ srcrb = ax[2].fill_between(noises, superreg['results']['err'], y2=0.,
 
 ax[2].set_xlabel("Noise $\sigma$")
 labels = ("Fourier Shift (FS) error", "FS CRB",
-          "Theoretical FS error", "Super Registration\n(SR) error",
+          "Theoretical FS error", "SR error",
           "SR CRB")
 lines = (merr[0], mcrb, mcalc[0], srerr, srcrb)
 #lines = (merr[0], mcrb[0], mcalc[0], srerr, srcrb[0])
