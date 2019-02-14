@@ -43,7 +43,7 @@ def gaussianimage(size, y, x, sy, sx):
     """
     yy, xx = np.arange(size[0])[:,None], np.arange(size[1])[None,:]
     img = np.exp(-0.5*(((xx-float(x))/sx)**2 + ((yy-float(y))/sy)**2))
-    return img/img.max()
+    return img/img.sum()
 
 def trianglewaves(size, k=1./3):
     y, x = np.arange(size[0])[:,None], np.arange(size[1])[None,:]
@@ -68,11 +68,19 @@ def powerlaw(size, p, scale=None, rng=np.random):
     x, y = np.arange(lx//2+1), np.fft.fftshift(np.arange(ly)-ly/2)
     xg, yg = np.meshgrid(x, y)
     k = np.hypot(xg, yg)
-    img = np.fft.irfftn(kk*np.exp(-k/scale)/(1+k)**p)
+    img = np.fft.irfftn(kk*np.exp(-(k/scale)**2/2.)/(1+k)**p)
     return img / img.ptp()
 
+def correlatednoise(N, Ly, Lx, scale):
+    noise_k = np.fft.fftn(np.random.randn(N, Ly, Lx), axes=(1,2))
+    gauss = np.fft.fftshift(gaussianimage((Ly, Lx), Ly/2, Lx/2, scale, scale))
+    corrnoise = np.fft.ifftn(noise_k * np.fft.fftn(gauss)[None,...]).real
+    corrnoise /= np.sqrt(np.sum(corrnoise * corrnoise))
+    return corrnoise*np.sqrt(np.sum(noise_k*noise_k.conj()).real)/np.sqrt(Ly*Lx)
+
 def fakedata(noise, shifts=[np.zeros(2)], L=64, sliceobj=None,
-             offset=np.array(data.shape)//4, img=data, mirror=True):
+             offset=np.array(data.shape)//4, img=data, mirror=True,
+             **kwargs):
     """
     Make fake data from img with relative shifts, 
     some size determined by sliceobj, and some noise added.

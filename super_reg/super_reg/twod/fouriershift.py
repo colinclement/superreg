@@ -49,15 +49,16 @@ class Register(object):
         """
         self.images = images
         self.imag0, self.imag1 = images
+        self.Ly, self.Lx = self.imag0.shape
         assert self.imag0.shape == self.imag1.shape, "Images must share their shape"
-        self.masktype = kwargs.get("masktype", "linear")
+        self.masktype = kwargs.get("masktype", "constant")
         self._maskdict = {'linear': self._linear_interp_mask,
                           'constant': self._constant_region_mask,
                           'sigmoid': self._sigmoid_mask,
                           'none': self._nomask}
-        self.mask_kwargs = kwargs.get('mask_kwargs', [{}, {}])
+        defaultkwargs = [{'o': 4, 'l': self.Ly-8}, {'o': 4, 'l': self.Lx-8}]
+        self.mask_kwargs = kwargs.get('mask_kwargs', defaultkwargs)
 
-        self.Ly, self.Lx = self.imag0.shape
         self._h = kwargs.get("h", 1E-7)
         self._mirror = kwargs.get("mirror", True)
         self._dy = np.array([self._h, 0.])
@@ -270,7 +271,6 @@ class Register(object):
             self.initialize(images)
         
         delta0 = delta0 if delta0 is not None else self.firstguess()
-        #delta0 += 1E-3 * np.random.randn(2)
         iprint = kwargs.get("iprint", 0)
 
         if kwargs.get('maskdict'):

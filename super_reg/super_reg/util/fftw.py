@@ -36,6 +36,7 @@ class FFT(object):
         """
         self.real = real
         self.shape = shape
+        self.n = shape[0]*shape[1]
         self.realshape = (shape[0], shape[1]//2+1)
         self.fftwkwargs = {"threads": kwargs.get("threads", 2),
                            "flags": [kwargs.get("plan", "FFTW_MEASURE")], 
@@ -61,6 +62,8 @@ class FFT(object):
             pyfftw.import_wisdom(pickle.load(open(infile, 'rb')))
         except (IOError, TypeError) as e:
             self._savewisdom(infile)
+        except EOFError as e:
+            pass  # file exists but is empty from another FFT being run
 
     def _savewisdom(self, outfile):
         if outfile is None:
