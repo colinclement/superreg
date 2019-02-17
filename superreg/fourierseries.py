@@ -1,3 +1,14 @@
+"""
+fourierseries.py
+
+author: Colin Clement and Matt Bierbaum
+date: 2018-02-01
+
+This module performs image registration on periodic images by
+modeling the underlying true image as a sum of Fourier components.
+"""
+
+
 import warnings
 import numpy as np
 import numexpr as ne
@@ -10,11 +21,7 @@ from numpy.linalg import slogdet
 from superreg.util.leastsq import LM
 import superreg.util.makedata as md
 
-DEGREE = 20
-
 rng = np.random.RandomState(14850)
-
-# TODO: Pass correct noise into fit while testing so CRB curve goes to zero
 
 
 class SuperRegistration(object):
@@ -35,6 +42,8 @@ class SuperRegistration(object):
         domain : ndarray [2, 2]
             [[ymin, ymax], [xmin, xmax]]
 
+        gamma : float
+            Prior strength penalizing magnitude of Fourier coefficients
         """
         Ly, Lx = images[0].shape
         self.deg = min(deg, Ly//2, Lx//2)
@@ -59,9 +68,18 @@ class SuperRegistration(object):
         self.set_params(self.p0)
         
     def phase(self, shift):
+        """ e^(i k shift) """
         return np.exp(-1j*shift[0]*self.ky)*np.exp(-1j*shift[1]*self.kx)
 
     def set_params(self, params):
+        """
+        Fill parameters into coef matrix so that image generation can
+        be performed via a single Fourier Transform
+        Parameters
+        ----------
+        params : array_like
+            list of fourier coefficients, real then imaginary
+        """
         M, deg = 2 * (self.N - 1), self.deg
         self.shifts = params[:M].reshape(self.N-1, 2)
         coefs = params[M:]
@@ -232,6 +250,22 @@ class SuperRegistration(object):
         return self.shiftsol[0]
 
     def fit(self, images=None, p0=None, sigma=None, abschange=1E-6, **kwargs):
+        """
+        Fit the image model and shifts
+        Parameters
+        ----------
+        images : array_like
+            stack of images
+        p0 : array_like
+            initial parameter values of Fourier coefficients
+        sigma : float
+            estimate of noise in images
+        abschange : float
+            convergence criterion for alternating optimization
+        Returns
+        -------
+            shifts, shift_uncertainties
+        """
         if images is not None:  # reset images and parameters
             self.images = images
             self.images_k = np.fft.rfftn(images, axes=(1,2), norm='ortho')
@@ -263,18 +297,18 @@ class SuperRegistration(object):
         var = sigma/np.sqrt(jtj)
         return self.shifts, var.reshape(*self.shifts.shape)
 
-    def evidence_old(self, sigma=None):
-        s = sigma or self.estimatenoise()
-        r = self.residual.ravel()
-        c = self.coef
-        N = len(self.params)
-        J = self.jac()
-        JTJ = J.T.dot(J)
-        logdet = np.log(JTJ.diagonal()).sum()
-        return (-r.dot(r)/s**2 - self.gamma*np.sum(np.abs(c)**2)
-                + N*np.log(2*np.pi*s**2) - logdet)/2.
-
     def evidence(self, sigma=None):
+        """ 
+        Calculate the log-evidence or estimate of the posterior
+        normalization to perform model selection
+        Parameters
+        ----------
+        sigma : float
+            Noise level of images, estimated by other means if not provided
+        Returns
+        -------
+        log_evidence : float
+        """
         s = self.estimatenoise() if sigma is None else sigma
         r = np.concatenate((self.residual.ravel(), 
                             s*np.sqrt(self.gamma)*np.abs(self.coef).ravel()))
