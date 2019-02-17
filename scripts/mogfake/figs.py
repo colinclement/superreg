@@ -1,14 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-os.sys.path.append('../')
-from util import upsample, shiftallto
 
-
-def power(img):
-    imgk = np.fft.fftn(img)
-    imgk[0,0] = 1.
-    return np.abs(np.fft.fftshift(imgk))**2
+from superreg.util.image import upsample, shift_all_to, power
 
 def diffshifts(reg, fshift, trueshift):
     fig, axe = plt.subplots()
@@ -27,7 +21,7 @@ def diffshifts(reg, fshift, trueshift):
 
 def showresults(reg, fshift, data, sigma, trueimg,
                 sl=np.s_[1:-2,1:-2], upfactor=2, p=0.5):
-    frecon = upsample(shiftallto(data, fshift)[sl], upfactor)
+    frecon = upsample(shift_all_to(data, fshift)[sl], upfactor)
     ydom, xdom = reg.domain()
     y = np.linspace(0, data.shape[1]-1, upfactor*data.shape[1])
     x = np.linspace(0, data.shape[2]-1, upfactor*data.shape[2])

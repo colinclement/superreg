@@ -1,14 +1,12 @@
-import os
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from superreg.chebseries import SuperRegistration
 from superreg.fouriershift import Register
+import superreg.util.image as ui
 import makedata as md
 
-os.sys.path.append('../')
-import util
 from mog import mog
 
 mpl.rcParams['image.cmap'] = 'Greys'
@@ -53,8 +51,8 @@ def evidenceloop(data, sigma, deglist, **kwargs):
     return evdlist, shiftlist, coeflist    
 
 def standardmethod(data, **kwargs):
-    fshift = util.firsttry(data, **kwargs)
-    fsrecon = util.shiftallto(data, fshift)
+    fshift = ui.multi_image_pairwise_registration(data, **kwargs)
+    fsrecon = ui.shift_all_to(data, fshift)
     return fshift, fsrecon
 
 def noiseloop(sigma, model, params, pnames, p, M=20, deglist=range(5,20),

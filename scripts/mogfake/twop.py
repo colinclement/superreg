@@ -1,14 +1,13 @@
-import os
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+
 from superreg.chebseries import SuperRegistration
 from superreg.fouriershift import Register
+import superreg.util.image as ui
 import makedata as md
 
-os.sys.path.append('../')
-import util
 from mog import mog
 
 mpl.rcParams['image.cmap'] = 'Greys'
@@ -41,8 +40,8 @@ model = md.twoparticles(np.concatenate([[np.zeros(2)], s0]), pos=pos,
                         widths=widths)
 data = model + sigma * rng.randn(*model.shape)
 
-fshift = util.firsttry(data)
-fsrecon = util.shiftallto(data, fshift)
+fshift = ui.multi_image_pairwise_registration(data)
+fsrecon = ui.shift_all_to(data, fshift)
 
 # for N=16 L=64 sigma=0.2 maxevd is deg=8
 # for N=8 L=64 sigma=0.2 maxevd is deg=8

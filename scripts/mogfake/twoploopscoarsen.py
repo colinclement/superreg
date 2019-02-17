@@ -1,14 +1,12 @@
-import os
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from superreg.chebseries import SuperRegistration
 from superreg.fouriershift import Register
+import superreg.util.image as ui
 import makedata as md
 
-os.sys.path.append('../')
-import util
 from mog import mog
 
 mpl.rcParams['image.cmap'] = 'Greys'
@@ -33,8 +31,8 @@ def makemodel(shifts, pos, widths, **kwargs):
                            widths=widths)
 
 def standardmethod(data, a=1, **kwargs):
-    fshift = util.coarsereg(data, a, **kwargs)
-    fsrecon = util.shiftallto(data, fshift)
+    fshift = ui.coarsereg(data, a, **kwargs)
+    fsrecon = ui.shift_all_to(data, fshift)
     return fshift, fsrecon
 
 def noiseloop(sigma, model, params, pnames, p, M=20, alist=[1, 2, 3, 4],

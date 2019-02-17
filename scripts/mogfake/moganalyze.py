@@ -5,10 +5,8 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from superreg.chebseries import SuperRegistration
 from superreg.fouriershift import Register
+import superreg.util.image as ui
 import makedata as md
-
-os.sys.path.append('../')
-import util
 
 mpl.rcParams['image.cmap'] = 'Greys'
 
@@ -24,8 +22,8 @@ data = model + sigma * rng.randn(*model.shape)
 # randoom numbers different!
 truth = md.twositesquarelattice([np.zeros(2)], 2*L, noise=1./250)[0]
 
-fshift = util.firsttry(data, s0list=shifts[1:]) #s0list=0.1*rng.randn(len(data)-1,2))
-fsrecon = util.shiftallto(data, fshift)
+fshift = ui.multi_image_pairwise_registration(data, s0list=shifts[1:])
+fsrecon = ui.shift_all_to(data, fshift)
 
 # 29 is the max evd for N=20, L=32, sigma=0.1
 # 29 works the best but isn't the max evidence for N=30, L=18, sigma=0.1
