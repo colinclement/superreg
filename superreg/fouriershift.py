@@ -35,15 +35,18 @@ class Register(object):
         """
         Find the vector [dy, dx] which translates imag1 to match imag0.
 
-        Inputs:
+        Parameters
+        ----------
             (required)
-            imag1: array_like image of shape (Ly, Lx)
-            imag0 : array_like image of shape (Ly, Lx)
+            imag1: array_like 
+            imag0 : array_like
+                image of shape (Ly, Lx)
         kwargs:
             h : float, finite difference step size for estimating jacobian
             all other kwargs are passed into FFT (above)
 
-        usage:
+        Usage
+        -----
             reg = Register(imag1, imag0)
             delta, delta_sigma, msg = reg.minimize()
         """
@@ -85,14 +88,16 @@ class Register(object):
             self.fft22 = np.fft.rfft2
             self.ifft22 = np.fft.irfft2
         
-        self.initialize(images)
+        self._initialize(images)
 
-    def initialize(self, images):
+    def _initialize(self, images):
+        """ Set up fftw objects """
         self.imag1_k = self.fft2(self.imag1)
         self.imag1_mirror = self.mirrorpad(self.imag1)
         self.imag1_mirror_k = self.fft22(self.imag1_mirror)
 
     def mirrorpad(self, imag):
+        """ double pad img with mirrors of itself """
         Ly, Lx = imag.shape
         imag_mirror = np.zeros((2*Ly, 2*Lx))
         imag_mirror[:Ly,:Lx] = imag
@@ -104,12 +109,14 @@ class Register(object):
     def translate(self, delta, imag=None):
         """
         Translate image by delta.
-        inputs:
+        Parameters
+        ----------
             (required)
             delta : array_like with two elements [dy, dx]
             (optional)
             imag : array_like of shape (Ly, Lx), default is self.imag1
-        returns:
+        Returns
+        -------
             imag_translated : array_like of shape (Ly,Lx) translated by delta
         """
         if self._mirror:
@@ -158,14 +165,16 @@ class Register(object):
     def residual(self, delta, imag1=None, imag0=None):
         """
         Finds the difference translate(imag1) - imag0
-        input:
+        Parameters
+        ----------
             (required)
             delta : array_like [dy, dx]
             (optional)
             imag1 : array_like image of shape (Ly, Lx) which will be translated
                 by delta. Default is self.imag1
             imag0 : array_like iamge of shape (Ly, Lx). Default is self.imag0
-        returns:
+        Returns
+        -------
             residual : array_like, shape can be smaller than (Ly, Lx) if delta
                 has components larger in magnitude than 0.5
         """
@@ -235,12 +244,14 @@ class Register(object):
             where N is the number of pixels. Minimizing this w.r.t. sigma
             yields
                 sigma = sqrt(C/N) where C = ||I0 - T_delta(I1)||^2
-        input:
+        Parameters
+        ----------
             delta_bestfit : array_like of length 2 (dy, dx)
             (optional)
             imag1 : array_like image of shape (Ly, Lx). Default is self.imag1
             imag0 : array_like iamge of shape (Ly, Lx). Default is self.imag0
-        returns:
+        Returns
+        -------
             sigma : float, optimal sigma assuming best fit cost
         """
         cost = self.cost(delta_bestfit, imag1, imag0)
@@ -249,7 +260,8 @@ class Register(object):
     def fit(self, images=None, delta0=None, **kwargs):
         """
         Register two images by optimizing translationg of imag1
-        inputs:
+        Parameters
+        ----------
             (optional)
             delta0 : array_like of length 2 [dy, dx], default is set by cross
                 correlation
@@ -260,7 +272,8 @@ class Register(object):
             kwargs:
                 are passed directly into leastsq.LM.leastsq or
                 scipy.optimize.minimize
-        returns:
+        Returns
+        -------
             p1, p1_sigma, msg : array_like (optimal delta), array_like (error in
                 optimal delta), str or int (message from optimizer, see specific
                 optimizer for meaning)
@@ -268,7 +281,7 @@ class Register(object):
         if images is not None:
             self.images = images
             self.imag0, self.imag1 = images
-            self.initialize(images)
+            self._initialize(images)
         
         delta0 = delta0 if delta0 is not None else self.firstguess()
         iprint = kwargs.get("iprint", 0)
