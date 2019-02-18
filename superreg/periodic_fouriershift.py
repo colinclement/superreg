@@ -1,10 +1,11 @@
 """
-periodicshift.py
+periodic_fouriershift.py
 
 author: Colin Clement
 date: 2017-06-06
 
-This module computes the registration error between two periodic noisy images
+This module computes the rigid-shift registration between two periodic noisy
+images, by shifting one image to match the other.
 """
 
 import numpy as np
@@ -29,12 +30,15 @@ class Register(object):
     Define T such that T_delta(I) translates image I by delta. Then to 
     infer delta we want to solve the following optimization problem:
         delta^* = min_delta 1/2 ||I0 - T_delta(I1)||^2
+
+    ASSUMES periodic images
     """
     def __init__(self, images, **kwargs):
         """
         Find the vector [dy, dx] which translates imag1 to match imag0.
 
-        Inputs:
+        Parameters
+        ----------
             (required)
             imag1: array_like image of shape (Ly, Lx)
             imag0 : array_like image of shape (Ly, Lx)
@@ -42,7 +46,8 @@ class Register(object):
             h : float, finite difference step size for estimating jacobian
             all other kwargs are passed into FFT (above)
 
-        usage:
+        Usage
+        -----
             reg = Register(imag1, imag0)
             delta, delta_sigma, msg = reg.minimize()
         """
@@ -54,24 +59,13 @@ class Register(object):
         self.y = np.arange(self.Ly)
         self.x = np.arange(self.Lx)
         self.ky = np.fft.fftfreq(self.Ly, d=1./(2*np.pi))[:,None]
-        #self.kx = np.fft.rfftfreq(self.Lx, d=1./(2*np.pi))
         self.kx = np.fft.fftfreq(self.Lx, d=1./(2*np.pi))
 
-        #if hasfftw:
-        #    self.FFT = FFT(self.imag0.shape, real=False, **kwargs)
-        #    self.fft2 = self.FFT.fft2
-        #    self.ifft2 = self.FFT.ifft2
-        #else:
-        #    self.fft2 = np.fft.fft2
-        #    self.ifft2 = np.fft.ifft2
-        
         self.initialize(images)
 
     def initialize(self, images):
         self.imag0, self.imag1 = images
         n = self.imag0.size
-        #self.imag1_k = self.fft2(self.imag1)/np.sqrt(n)
-        #self.imag0_k = self.fft2(self.imag0)/np.sqrt(n)
         self.imag0_k = np.fft.fftn(self.imag0, norm='ortho')
         self.imag1_k = np.fft.fftn(self.imag1, norm='ortho')
 

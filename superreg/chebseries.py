@@ -1,3 +1,18 @@
+"""
+chebseries.py
+
+author: Colin Clement and Matt Bierbaum
+date: 2018-01-02
+
+This module computes the rigid shift registration between two (or more!)
+shifted noisy images, by modeling the true underlying image as sum of
+Chebyshev polynomials.
+
+NOTE: As the shifts are updated, the domain of the Chebyshev polynomials is
+modified to be the smallest rectangle containing all the images, so that when
+the outermost shifts change, the definition of the Chebyshev coeffcients change
+too!
+"""
 import warnings
 import numpy as np
 import numexpr as ne
@@ -10,11 +25,6 @@ from scipy.sparse.linalg import cg, lsmr
 
 from superreg.util.leastsq import LM
 from superreg.fouriershift import Register
-import superreg.util.makedata as md
-
-DEGREE = 20
-
-rng = np.random.RandomState(14850) 
 
 
 class SuperRegistration(object):
@@ -36,6 +46,10 @@ class SuperRegistration(object):
         domain : ndarray [2, 2]
             [[ymin, ymax], [xmin, xmax]]
 
+        Usage
+        -----
+        reg = SuperRegistration(image_stack, 10)
+        reg.fit(iprint=1)  # will print stages of optimization
         """
         self.deg = deg
         self.images = images
@@ -54,6 +68,16 @@ class SuperRegistration(object):
         self.firststep(shifts, coef, damp=kwargs.get('damp', 1E-5))
 
     def firststep(self, shifts=None, coef=None, **kwargs):
+        """
+        Compute the initial condition using the standard Fourier shift
+        registration and a linear fit of the chebyshev coefficients
+        Parameters
+        ----------
+        shifts : array_like 
+            use these initial shifts
+        coef : array_like
+            use these initial Chebyshev coefficients
+        """
         self.shifts = shifts
         if shifts is None:
             self.shifts = np.array([
@@ -77,32 +101,45 @@ class SuperRegistration(object):
         return np.array([[ymin, ymax], [xmin, xmax]])
 
     def set_params(self, params):
+        """ Take params array and populate shifts and coefs """
         M = 2 * (self.N - 1)
         self.shifts = params[:M].reshape(self.N-1, 2)
         self.coef = params[M:].reshape(* (2 * (self.deg + 1,)))
 
     @property
     def params(self):
+        """ Return the shifts, coefs in one array """
         return np.concatenate((self.shifts.ravel(), self.coef.ravel()))
 
     @property
     def shiftiter(self):
+        """ 
+        Add zero shift to shifts to produce a shift iterator the length of
+        the number of images
+        """
         return chain([np.zeros(2)], self.shifts)
 
     @property
     def model(self):
+        """
+        Return the model images in the currrent state of shifts and coefs
+        """
         y, x = self.yg, self.xg
         return np.array([self(y + sy, x + sx) for (sy, sx) in self.shiftiter])
 
     def coord(self, y, x, shifts=None):
         """ 
-        Chebyshev domain is [-1,1]
+        Map y, x into the Chebyshev domain of [-1,1]
         """
         dy, dx = self.domain(shifts)
         return (2 * (y - dy[0]) / (dy[1] - dy[0]) - 1,
                 2 * (x - dx[0]) / (dx[1] - dx[0]) - 1)
 
     def gradcoord(self, c, s, ds, yorx, shifts=None):
+        """ 
+        Compute the gradient of the log-likelihood with respect to the
+        coordinate change
+        """
         shifts = shifts if shifts is not None else self.shifts
         ss = shifts[:,yorx]
         minshifts, maxshifts = np.min(ss), np.max(ss)
@@ -121,21 +158,25 @@ class SuperRegistration(object):
 
     @property
     def r(self):
+        """ The residual error between the model and data """
         return self.model - self.images
 
     @property
     def r_k(self):
+        """ The Fourier spectrum of the residuals"""
         rk = np.abs(np.fft.fftn(self.r, axes=(1,2)))**2
         rk[:,0,0] = 0.  # hiding sum
         return np.fft.fftshift(rk, axes=(1,2))
 
     def res(self, params=None):
+        """ Model residuals flattened into an array """
         params = params if params is not None else self.params
         self.set_params(params)
 
         return (self.model - self.images).ravel()
 
     def gradshifts(self, shifts=None, jac=None):
+        """ Gradient of log-likelihood with respect to shifts """
         N = np.prod(self.shape)
         shifts = shifts if shifts is not None else self.shifts
         minshifts, maxshifts = np.min(shifts, 0), np.max(shifts, 0)
@@ -150,7 +191,7 @@ class SuperRegistration(object):
                 mins = sj == minshifts[j%2] and sj <= 0
                 maxs = sj == maxshifts[j%2] and sj >= 0
                 if mins or maxs or j//2 == i-1:
-                    gradt = self.tmatrix(si, grady=not j%2, gradx=j%2)
+                    gradt = self._tmatrix(si, grady=not j%2, gradx=j%2)
                     ckl = self.coef[:,1:].ravel() if j%2 else self.coef[1:].ravel()
 
                     c = self.x[None,:] if j%2 else self.y[:,None]
@@ -162,6 +203,7 @@ class SuperRegistration(object):
         return jac
 
     def gradshifts_fd(self, shifts=None, h=1E-6):
+        """ Finite difference gradient for debugging """
         if shifts is not None:
             self.shifts = shifts
 
@@ -178,14 +220,16 @@ class SuperRegistration(object):
         return jac
 
     def gradcoef(self, jac=None):
+        """ Gradient of the log-likelihood with respect to coefs """
         M = np.prod(self.shape)
         if jac is None:
             jac = np.zeros((self.N * M, (self.deg+1)**2))
         for k, s in enumerate(self.shiftiter):
-            jac[k*M:(k+1)*M,:] = self.tmatrix(s)
+            jac[k*M:(k+1)*M,:] = self._tmatrix(s)
         return jac
 
     def grad(self, params=None):
+        """ The total gradient of the log-likelihood """
         if params is not None:
             self.set_params(params)
         if hasattr(self, '_jac'):
@@ -198,6 +242,7 @@ class SuperRegistration(object):
         return self._jac
 
     def jac(self, p=None, h=1e-6):
+        """ The finite-different gradient for debugging """
         if p is not None:
             self.set_params(p)
         else:
@@ -220,6 +265,9 @@ class SuperRegistration(object):
         return np.array(j).T
 
     def estimatenoise(self, params=None):
+        """
+        Estimate the noise of the data. Should be at best fit parameters.
+        """
         if params is not None:
             self.set_params(params)
         else:
@@ -228,10 +276,15 @@ class SuperRegistration(object):
         return np.sqrt(0.5*r.dot(r)/(len(r)-len(params)))
     
     def firstguess(self, imag1, imag0):
+        """ Wrapper for Fouriershift registration """
         reg = Register([imag1, imag0])
         return reg.fit()[0]  # convention is opposite for marginal
 
-    def tmatrix(self, shift, grady=False, gradx=False):
+    def _tmatrix(self, shift, grady=False, gradx=False):
+        """
+        Compute the matrix which computes all Chebyshev images from a vector of
+        coefficients, i.e. Images = T.dot(coefs)
+        """
         dy = self.deg + 1 if not grady else self.deg
         dx = self.deg + 1 if not gradx else self.deg
         T = np.zeros((self.images[0].size, dx*dy))
@@ -257,11 +310,12 @@ class SuperRegistration(object):
         return T
 
     def bestcoef(self, **kwargs):
+        """ With fixed shifts find best fit coefficients """
         M = (self.deg + 1)**2
         A = np.zeros((M, M))
         b = np.zeros(M)
         for s, d in zip(self.shiftiter, self.images):
-            t = self.tmatrix(s)
+            t = self._tmatrix(s)
             A[:,:] += t.T.dot(t)
             b[:] += t.T.dot(d.ravel())
 
@@ -269,6 +323,7 @@ class SuperRegistration(object):
         return self._firstcoef[0].reshape(self.deg+1,-1)
 
     def bestshifts(self, shifts=None, **kwargs):
+        """ With fixed coefs find best fit shifts """
         if shifts is not None:
             self.shifts = shifts
         with warnings.catch_warnings():
@@ -283,12 +338,31 @@ class SuperRegistration(object):
         self.opt = LM(self.res, self.grad)
 
     def paramerrors(self, params=None, sigma=None):
+        """ Compute CRB of parameters at best fit """
         sigma = sigma if sigma is not None else self.estimatenoise()
         j = self.grad(params)
         jtj = j.T.dot(j)
         return sigma/np.sqrt(jtj.diagonal())
 
     def fit(self, images=None, p0=None, sigma=None, **kwargs):
+        """
+        Maximize the log-likelihood
+        Can set or reset the data (images), initial parameters,
+        the noise in the data (sigma).
+        Parameters
+        ----------
+        (optional)
+        images : array_like
+            stack of data images of shape (N_images, Ly, Lx)
+        p0 : array_like
+            flat array of image parameters (shifts, coefs)
+        sigma : float
+            estimated noise in images
+        kwargs:
+            handed to the optimizer, superreg.util.leastsq.LM by default
+            iprint = 0, 1, 2 sets the verbosity of the optimizer. See
+            documentation of LM for more kwargs.
+        """
         if images is not None:  # reset images and parameters
             self.images = images
         p0 = p0 if p0 is not None else self.params
@@ -302,9 +376,14 @@ class SuperRegistration(object):
         return shifts, perrors[:shifts.size].reshape(*shifts.shape)
 
     def cost(self, params=None):
+        """ Log-likelihood of data given parameters """
         return np.sum(self.res(params)**2)/2.
     
     def itnfit(self, images=None, p0=None, sigma=None, tol=1E-6, **kwargs):
+        """
+        Alternative optimization scheme of alternating minimization of shifts
+        and coefficients.
+        """
         if images is not None:  # reset images and parameters
             self.images = images
         if p0 is not None:
@@ -339,9 +418,14 @@ class SuperRegistration(object):
         return np.array([-r.dot(r)/s**2, N*np.log(2*np.pi*s**2), -logdet])/2.
 
     def evidence(self, sigma=None):
+        """ Compute the model evidence or the normalization of the posterior """
         return self.evidenceparts(sigma).sum()
 
     def show(self, n=2, cmap='Greys_r'):
+        """ 
+        Plot n of the model images and their residuals in real and Fourier
+        space 
+        """
         fig, axes = plt.subplots(4, n)
         kw = {'vmin' : min(self.images.min(), self.model.min()),
               'vmax' : max(self.images.max(), self.model.max()),
@@ -357,6 +441,10 @@ class SuperRegistration(object):
 
 
 def optcomplexity(data, sigma,  **kwargs):
+    """
+    A simple scheme for evidence maximization which increases complexity
+    until the evidence decreases to find the most likely model
+    """
     d0 = kwargs.pop('d0', 5)
     show = kwargs.pop('show', False)
     reg = SuperRegistration(data, d0)
@@ -378,12 +466,11 @@ def optcomplexity(data, sigma,  **kwargs):
  
 if __name__=="__main__":
     
-    from scipy.misc import face
-    import superreg.twod.fourierseries as fs
     import matplotlib.pyplot as plt
+    import superreg.util.makedata as md
 
     deg = 8
-    L = 32
+    L = 32 rng = np.random.RandomState(14850) 
     img = md.powerlaw((2*L, 2*L), 1.8, scale=2*L/6., rng=rng)
     shifts = [np.array([.15, 0.])]  # rng.randn(2)
     shifts = np.random.randn(10,2)
