@@ -1,10 +1,13 @@
 """
-biastest.py
+periodicbiastest.py
 
 author: Colin Clement
 date: 2017-06-26
 
-This module measures bias in the statistical estimator
+This module measures bias and expected error of image registration,
+assuming periodic images. It fixes the true shift to one value, creates a
+true image, shifts it, and adds some noise, repeating the noise addition for
+some number of times.
 """
 
 import pickle
