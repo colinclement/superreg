@@ -1,3 +1,13 @@
+"""
+chebseriespriors.py
+
+author: Colin Clement
+date: 2018-05-09
+
+This module extends chebseries.SuperRegistration to put prior
+constraints on the image model Chebyshev coefficients.
+"""
+
 import warnings
 import numpy as np
 import numexpr as ne
@@ -12,10 +22,6 @@ from superreg.util.leastsq import LM
 import superreg.util.makedata as md
 from superreg.chebseries import SuperRegistration
 
-DEGREE = 20
-
-rng = np.random.RandomState(14850)
-
 
 class SuperRegistrationPriors(SuperRegistration):
     def __init__(self, images, deg, shifts=None, domain=None, gamma=None):
@@ -23,8 +29,6 @@ class SuperRegistrationPriors(SuperRegistration):
 
         degs = np.arange(deg+1)
         self.mdist = 1E-6 + np.hypot(degs[:,None], degs[None,:])
-        #degs = 0.5 * (np.arange(deg+1) > 0)
-        #self.mdist = 1E-6 + (degs[:,None] + degs[None,:])
         S = 2 * (len(images)-1)
         M, N = (deg+1)**2+S, images.size
         self.glogp = np.zeros((M-S, M))
@@ -162,9 +166,9 @@ def optcomplexity(data, registration, sigma=None, gamma=None, **kwargs):
 
 if __name__=="__main__":
     
-    from scipy.misc import face
-    import super_reg.twod.fourierseries as fs
     import matplotlib.pyplot as plt
+
+    rng = np.random.RandomState(14850)
 
     degree = 20
     L = 32
