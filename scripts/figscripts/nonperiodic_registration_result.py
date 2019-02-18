@@ -1,3 +1,10 @@
+"""
+paperfig3.py
+
+Creates the figure from the paper which summarizes general non-periodic
+registration results.
+"""
+
 import os
 import datetime
 import numpy as np
@@ -130,9 +137,9 @@ axes[1].legend(
 
 plt.tight_layout()
 
-today = datetime.datetime.now().isoformat().split('T')[0]
-dirname = "/home/colin/work/overleaf-papers/superreg/figs"
-plt.savefig(os.path.join(dirname,
-                         "{}-nonperiodic-bias-error.pdf".format(today)),
-           bbox_inches='tight')
+#today = datetime.datetime.now().isoformat().split('T')[0]
+#dirname = "/home/colin/work/overleaf-papers/superreg/figs"
+#plt.savefig(os.path.join(dirname,
+#                         "{}-nonperiodic-bias-error.pdf".format(today)),
+#           bbox_inches='tight')
 plt.show()
