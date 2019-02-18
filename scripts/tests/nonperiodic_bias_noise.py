@@ -1,11 +1,12 @@
 """
-setcomplexity.py
+nonperiodic_bias_noise.py
 
 author: Colin Clement
 date: 2018-06-04
 
-This module predicts the correct complexity to use in subsequent noise/bias
-studies
+This module calculates the error and bias, as a function of noise and true
+shift, for general non-periodic image registration, for both the standard method
+of shifting one image to match the other, and for Super Registration.
 """
 
 import os
@@ -21,7 +22,6 @@ import superreg.util.tester as tester
 import superreg.util.makedata as md
 
 from superreg.fouriershift import Register
-import superreg.chebseriespriors as csp
 import superreg.chebseries as cs
 
 rng = np.random.RandomState(148509289)
@@ -61,18 +61,11 @@ if __name__=="__main__":
     mask_kwargs = [{'o': padding, 'l': L-2*padding}, 
                    {'o': padding, 'l': L-2*padding}]
 
-    complexities = np.load("results/complexity-2018-06-04-noise-degree-gamma.npy")
-    #complexities2 = np.load("results/complexity-endshift-2018-06-05-noise-degree-gamma.npy")
-    # noise degree gamma
-
     fstest = tester.BiasTest(datakwargs, Register, N=N, mask_kwargs=mask_kwargs,
                              masktype='constant', noises=noises)
 
-    dcomp = complexities[np.argmin(np.abs(complexities[:,0]-noise))]
     srtest = tester.BiasTest(datakwargs, cs.SuperRegistration, N=N, deg=deg,
                              noises=noises)
-    #srtest = tester.BiasTest(datakwargs, csp.SRGaussianPriors, N=N, 
-    #                         deg=deg, gamma=0.001)
 
     start = datetime.now()
     fsnoiseloop = fstest.noiseloop()
