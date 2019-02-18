@@ -16,7 +16,7 @@ import numpy as np
 from superreg.util.tester import BiasTest
 import superreg.util.makedata as md
 
-from superreg.periodicshift import Register
+from superreg.periodic_fouriershift import Register
 
 rng = np.random.RandomState(148509289)
 
